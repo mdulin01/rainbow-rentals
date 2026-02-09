@@ -3,12 +3,11 @@ import { X, Download, FileText, Image } from 'lucide-react';
 import { documentTypes } from '../../constants';
 
 const DocumentViewer = React.memo(({
-  isOpen,
   document,
   properties,
   onClose
 }) => {
-  if (!isOpen || !document) return null;
+  if (!document) return null;
 
   // Get document type info
   const docTypeInfo = documentTypes.find(dt => dt.value === document.type);

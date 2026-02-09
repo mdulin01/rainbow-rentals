@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { tenantStatuses } from '../../constants';
 
-const TenantModal = ({ isOpen, tenantData, onSave, onCancel }) => {
+const TenantModal = ({ property, tenant, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -16,12 +16,12 @@ const TenantModal = ({ isOpen, tenantData, onSave, onCancel }) => {
 
   // Pre-fill if editing
   useEffect(() => {
-    if (tenantData) {
-      setFormData(tenantData);
+    if (tenant) {
+      setFormData(tenant);
     } else {
       resetForm();
     }
-  }, [tenantData, isOpen]);
+  }, [tenant]);
 
   const resetForm = () => {
     setFormData({
@@ -52,18 +52,16 @@ const TenantModal = ({ isOpen, tenantData, onSave, onCancel }) => {
     onSave(formData);
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-800/95 border border-white/15 rounded-2xl w-full max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 bg-slate-800 border-b border-white/15">
           <h2 className="text-2xl font-bold text-white">
-            {tenantData?.name ? 'Edit Tenant' : 'Add Tenant'}
+            {tenant?.name ? 'Edit Tenant' : 'Add Tenant'}
           </h2>
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
           >
             <X className="w-6 h-6" />
@@ -187,7 +185,7 @@ const TenantModal = ({ isOpen, tenantData, onSave, onCancel }) => {
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-800/50 border-t border-white/15">
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
           >
             Cancel

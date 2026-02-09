@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Upload, Loader } from 'lucide-react';
 import { propertyTypes, propertyColors } from '../../constants';
 
-const NewPropertyModal = ({ isOpen, property, onSave, onCancel }) => {
+const NewPropertyModal = ({ property, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: '',
     street: '',
@@ -34,7 +34,7 @@ const NewPropertyModal = ({ isOpen, property, onSave, onCancel }) => {
     } else {
       resetForm();
     }
-  }, [property, isOpen]);
+  }, [property]);
 
   const resetForm = () => {
     setFormData({
@@ -110,8 +110,6 @@ const NewPropertyModal = ({ isOpen, property, onSave, onCancel }) => {
     onSave(formData);
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-800/95 border border-white/15 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -121,7 +119,7 @@ const NewPropertyModal = ({ isOpen, property, onSave, onCancel }) => {
             {property && typeof property === 'object' && property.id ? 'Edit Property' : 'Add New Property'}
           </h2>
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
           >
             <X className="w-6 h-6" />
@@ -352,7 +350,7 @@ const NewPropertyModal = ({ isOpen, property, onSave, onCancel }) => {
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-800/50 border-t border-white/15">
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
           >
             Cancel

@@ -6,7 +6,7 @@ const AddTransactionModal = ({
   transaction,
   properties,
   onSave,
-  onCancel,
+  onClose,
 }) => {
   const isEditing = !!transaction;
   const isIncome = transaction ? transaction.type === 'income' : false;
@@ -67,7 +67,7 @@ const AddTransactionModal = ({
             {isEditing ? 'Edit Transaction' : 'Add Transaction'}
           </h2>
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
           >
             <X className="w-5 h-5" />
@@ -256,7 +256,7 @@ const AddTransactionModal = ({
         {/* Footer */}
         <div className="flex gap-3 p-6 border-t border-white/10 bg-slate-800/50">
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="flex-1 py-3 px-4 rounded-xl font-semibold text-slate-400 bg-white/10 border border-white/15 hover:bg-white/15 transition"
           >
             Cancel

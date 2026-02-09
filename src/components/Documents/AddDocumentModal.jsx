@@ -3,11 +3,10 @@ import { X, Upload, AlertCircle } from 'lucide-react';
 import { documentTypes } from '../../constants';
 
 const AddDocumentModal = React.memo(({
-  isOpen,
   document,
   properties,
   onSave,
-  onCancel
+  onClose
 }) => {
   const [formData, setFormData] = useState({
     title: '',
@@ -54,7 +53,7 @@ const AddDocumentModal = React.memo(({
       });
     }
     setFileError('');
-  }, [document, isOpen]);
+  }, [document]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -136,8 +135,6 @@ const AddDocumentModal = React.memo(({
     onSave(docData);
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -147,7 +144,7 @@ const AddDocumentModal = React.memo(({
             {document?.id ? 'Edit Document' : 'Add Document'}
           </h2>
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-slate-400" />
@@ -335,7 +332,7 @@ const AddDocumentModal = React.memo(({
         {/* Footer */}
         <div className="sticky bottom-0 flex items-center justify-end gap-3 p-6 border-t border-white/15 bg-slate-800/80">
           <button
-            onClick={onCancel}
+            onClick={onClose}
             className="px-4 py-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors font-medium"
           >
             Cancel
