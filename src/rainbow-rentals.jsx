@@ -48,6 +48,7 @@ import { useFinancials } from './hooks/useFinancials';
 
 // Contexts
 import { SharedHubProvider } from './contexts/SharedHubContext';
+import BuildInfo from './components/BuildInfo';
 
 // Firebase imports
 import { initializeApp } from 'firebase/app';
@@ -1340,6 +1341,11 @@ export default function RainbowRentals() {
             </div>
           </nav>
         )}
+
+        {/* Footer - desktop only */}
+        <div className="hidden md:block text-center py-3 border-t border-white/5">
+          <BuildInfo />
+        </div>
 
         {/* Bottom rainbow bar - desktop only */}
         <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-orange-500 via-yellow-400 via-green-500 via-blue-500 to-purple-500 hidden md:block" />
