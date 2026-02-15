@@ -47,7 +47,8 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
         case 'name': return dir * (a.name || '').localeCompare(b.name || '');
         case 'property': return dir * (a.propertyName || '').localeCompare(b.propertyName || '');
         case 'status': return dir * (a.status || '').localeCompare(b.status || '');
-        case 'rent': return dir * ((a.monthlyRent || 0) - (b.monthlyRent || 0));
+        case 'rent': return dir * ((parseFloat(a.monthlyRent) || 0) - (parseFloat(b.monthlyRent) || 0));
+        case 'deposit': return dir * ((parseFloat(a.securityDeposit) || 0) - (parseFloat(b.securityDeposit) || 0));
         case 'leaseEnd': return dir * (a.leaseEnd || '9999').localeCompare(b.leaseEnd || '9999');
         default: return 0;
       }
@@ -168,6 +169,9 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                   <th className="text-right px-4 py-3 text-xs font-semibold text-white/40 uppercase tracking-wide cursor-pointer hover:text-white/60" onClick={() => handleSort('rent')}>
                     Rent <SortIcon col="rent" />
                   </th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-white/40 uppercase tracking-wide cursor-pointer hover:text-white/60" onClick={() => handleSort('deposit')}>
+                    Deposit <SortIcon col="deposit" />
+                  </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-white/40 uppercase tracking-wide">
                     Contact
                   </th>
@@ -212,6 +216,11 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-medium text-emerald-400">
                           {tenant.monthlyRent ? formatCurrency(tenant.monthlyRent) : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-white/60">
+                          {tenant.securityDeposit ? formatCurrency(tenant.securityDeposit) : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3">

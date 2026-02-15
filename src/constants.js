@@ -27,6 +27,16 @@ export const tenantStatuses = [
   { value: 'notice', label: 'Notice Given', color: 'text-orange-400' },
 ];
 
+// Property status options
+export const propertyStatuses = [
+  { value: 'occupied', label: 'Occupied', color: 'text-green-400', bg: 'bg-green-500/90' },
+  { value: 'vacant', label: 'Vacant', color: 'text-red-400', bg: 'bg-red-500/80' },
+  { value: 'lease-expired', label: 'Lease Expired', color: 'text-orange-400', bg: 'bg-orange-500/80' },
+  { value: 'month-to-month', label: 'Month-to-Month', color: 'text-blue-400', bg: 'bg-blue-500/80' },
+  { value: 'renovation', label: 'Renovation', color: 'text-purple-400', bg: 'bg-purple-500/80' },
+  { value: 'listed', label: 'Listed', color: 'text-yellow-400', bg: 'bg-yellow-500/80' },
+];
+
 // Document types
 export const documentTypes = [
   { value: 'lease', label: 'Lease', emoji: '📋' },

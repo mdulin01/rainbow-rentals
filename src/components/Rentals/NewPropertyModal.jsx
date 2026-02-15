@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, Loader } from 'lucide-react';
-import { propertyTypes, propertyColors } from '../../constants';
+import { propertyTypes, propertyColors, propertyStatuses } from '../../constants';
 
 const NewPropertyModal = ({ property, onSave, onClose }) => {
   const [formData, setFormData] = useState({
@@ -19,6 +19,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
     color: 'from-teal-400 to-cyan-500',
     emoji: '🏠',
     photo: null,
+    propertyStatus: '',
   });
 
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -160,7 +161,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
           {/* Basic Information */}
           <div>
             <h3 className="text-white font-semibold mb-4">Basic Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Property Name *</label>
                 <input
@@ -183,6 +184,22 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
                   {propertyTypes.map(type => (
                     <option key={type.value} value={type.value} className="bg-slate-800">
                       {type.emoji} {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Status</label>
+                <select
+                  name="propertyStatus"
+                  value={formData.propertyStatus}
+                  onChange={handleChange}
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
+                >
+                  <option value="" className="bg-slate-800">Auto-detect</option>
+                  {propertyStatuses.map(s => (
+                    <option key={s.value} value={s.value} className="bg-slate-800">
+                      {s.label}
                     </option>
                   ))}
                 </select>

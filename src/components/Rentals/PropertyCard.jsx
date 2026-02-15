@@ -1,37 +1,44 @@
 import React, { useState } from 'react';
-import { MoreVertical, MapPin, User, DollarSign, Calendar, Trash2, Edit3, Eye, FileText } from 'lucide-react';
-import { tenantStatuses } from '../../constants';
+import { MoreVertical, MapPin, User, DollarSign, Calendar, Trash2, Edit3, Eye, FileText, Clock } from 'lucide-react';
+import { tenantStatuses, propertyStatuses } from '../../constants';
 
 const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [], onViewDocument }) => {
   const [showMenu, setShowMenu] = useState(false);
-
-  const getStatusColor = (status) => {
-    const statusObj = tenantStatuses.find(s => s.value === status);
-    return statusObj ? statusObj.color : 'text-slate-400';
-  };
-
-  const getStatusLabel = (status) => {
-    const statusObj = tenantStatuses.find(s => s.value === status);
-    return statusObj ? statusObj.label : 'Unknown';
-  };
-
-  const getDaysUntilExpiration = () => {
-    if (!property.tenant?.leaseEnd) return null;
-    const leaseEnd = new Date(property.tenant.leaseEnd);
-    const today = new Date();
-    const diffTime = leaseEnd - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-  };
-
-  const daysLeft = getDaysUntilExpiration();
 
   // Find lease document for this property
   const leaseDoc = documents.find(
     d => String(d.propertyId) === String(property.id) && d.type === 'lease' && d.fileUrl
   );
 
-  const isRented = property.tenant?.name && property.tenant?.status === 'active';
+  // Property status (stored on property, or derive from tenant)
+  const propStatus = property.propertyStatus || (property.tenant?.name ? 'occupied' : 'vacant');
+  const statusObj = propertyStatuses.find(s => s.value === propStatus) || propertyStatuses[1]; // default vacant
+
+  // Lease expiry calculations
+  const getLeaseInfo = () => {
+    if (!property.tenant?.leaseEnd) return null;
+    const leaseEnd = new Date(property.tenant.leaseEnd + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = leaseEnd - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      // Expired - show expiry month/year
+      const month = leaseEnd.getMonth() + 1;
+      const year = leaseEnd.getFullYear();
+      return { expired: true, text: `Expired ${month}/${year}`, days: diffDays };
+    }
+    if (diffDays <= 90) {
+      return { expired: false, text: `${diffDays}d left`, days: diffDays };
+    }
+    // More than 90 days - show end date
+    const month = leaseEnd.getMonth() + 1;
+    const year = leaseEnd.getFullYear();
+    return { expired: false, text: `Ends ${month}/${year}`, days: diffDays };
+  };
+
+  const leaseInfo = getLeaseInfo();
 
   return (
     <div
@@ -45,15 +52,25 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
         ) : (
           <div className="text-3xl opacity-60">{property.emoji || '🏠'}</div>
         )}
-        {/* Rented badge */}
-        {isRented && (
-          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-green-500/90 text-white text-[10px] font-bold rounded-md">
-            RENTED
-          </span>
-        )}
-        {!property.tenant?.name && (
-          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-red-500/80 text-white text-[10px] font-bold rounded-md">
-            VACANT
+
+        {/* Status badge - top left */}
+        <span className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 ${statusObj.bg} text-white text-[10px] font-bold rounded-md`}>
+          {statusObj.label.toUpperCase()}
+        </span>
+
+        {/* Lease countdown - top right */}
+        {leaseInfo && (
+          <span className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-0.5 ${
+            leaseInfo.expired
+              ? 'bg-red-600/90 text-white'
+              : leaseInfo.days <= 30
+                ? 'bg-orange-500/90 text-white'
+                : leaseInfo.days <= 90
+                  ? 'bg-yellow-500/90 text-white'
+                  : 'bg-black/40 text-white/80'
+          }`}>
+            <Clock className="w-2.5 h-2.5" />
+            {leaseInfo.text}
           </span>
         )}
       </div>
@@ -141,14 +158,6 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
             </div>
           </div>
         </div>
-
-        {/* Lease warning */}
-        {daysLeft !== null && daysLeft <= 60 && (
-          <div className="flex items-center gap-1 text-orange-400 text-xs mt-1">
-            <Calendar className="w-3 h-3" />
-            <span>{daysLeft}d left on lease</span>
-          </div>
-        )}
       </div>
     </div>
   );
