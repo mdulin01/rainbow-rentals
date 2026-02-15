@@ -306,18 +306,30 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Card Color</label>
-                <select
-                  name="color"
-                  value={formData.color}
-                  onChange={handleChange}
-                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
-                >
-                  {propertyColors.map(color => (
-                    <option key={color} value={color} className="bg-slate-800">
-                      {color}
-                    </option>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'from-teal-400 to-cyan-500', label: 'Teal' },
+                    { value: 'from-blue-400 to-indigo-500', label: 'Blue' },
+                    { value: 'from-emerald-400 to-teal-500', label: 'Emerald' },
+                    { value: 'from-purple-400 to-violet-500', label: 'Purple' },
+                    { value: 'from-amber-400 to-orange-500', label: 'Amber' },
+                    { value: 'from-rose-400 to-pink-500', label: 'Rose' },
+                    { value: 'from-cyan-400 to-blue-500', label: 'Cyan' },
+                    { value: 'from-green-400 to-emerald-500', label: 'Green' },
+                  ].map(c => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, color: c.value }))}
+                      className={`flex flex-col items-center gap-1 p-1.5 rounded-xl border-2 transition ${
+                        formData.color === c.value ? 'border-white' : 'border-transparent hover:border-white/30'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${c.value}`} />
+                      <span className="text-[10px] text-white/60">{c.label}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Emoji</label>
