@@ -2,68 +2,59 @@ import { useState, useCallback, useRef } from 'react';
 
 /**
  * useDocuments Hook
- * Manages all Documents data and operations in one place
- * Returns an object with state and callbacks ready to use
+ * Manages all Documents data and operations
+ * All CRUD uses functional state updates (prev =>) to avoid stale closure bugs.
  */
-
 export const useDocuments = (currentUser, saveDocuments, showToast) => {
-  // Keep a ref to saveDocuments so callbacks always use the latest version
-  // without needing it in their dependency arrays (avoids stale closure bugs)
   const saveRef = useRef(saveDocuments);
   saveRef.current = saveDocuments;
 
-  // ========== STATE ==========
   const [documents, setDocuments] = useState([]);
-  const [documentViewMode, setDocumentViewMode] = useState('all'); // 'all' | 'byProperty' | 'byType'
+  const [documentViewMode, setDocumentViewMode] = useState('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState('all');
   const [documentPropertyFilter, setDocumentPropertyFilter] = useState('all');
-  const [showAddDocumentModal, setShowAddDocumentModal] = useState(null); // null | 'create' | doc object (edit)
+  const [showAddDocumentModal, setShowAddDocumentModal] = useState(null);
 
-  // ========== DOCUMENT CRUD ==========
   const addDocument = useCallback((doc) => {
-    const newDocs = [...documents, doc];
-    setDocuments(newDocs);
-    saveRef.current(newDocs);
+    setDocuments(prev => {
+      const newDocs = [...prev, doc];
+      saveRef.current(newDocs);
+      return newDocs;
+    });
     showToast('Document added', 'success');
-  }, [documents, showToast]);
+  }, [showToast]);
 
   const updateDocument = useCallback((docId, updates) => {
-    const newDocs = documents.map(d => d.id === docId ? { ...d, ...updates } : d);
-    setDocuments(newDocs);
-    saveRef.current(newDocs);
-  }, [documents]);
+    setDocuments(prev => {
+      const newDocs = prev.map(d => d.id === docId ? { ...d, ...updates } : d);
+      saveRef.current(newDocs);
+      return newDocs;
+    });
+  }, []);
 
   const deleteDocument = useCallback((docId) => {
-    const newDocs = documents.filter(d => d.id !== docId);
-    setDocuments(newDocs);
-    saveRef.current(newDocs);
+    setDocuments(prev => {
+      const newDocs = prev.filter(d => d.id !== docId);
+      saveRef.current(newDocs);
+      return newDocs;
+    });
     showToast('Document removed', 'info');
-  }, [documents, showToast]);
+  }, [showToast]);
 
-  // ========== RETURN CONTEXT VALUE ==========
   return {
-    // Data
     documents,
     documentViewMode,
     documentTypeFilter,
     documentPropertyFilter,
     showAddDocumentModal,
-
-    // Document operations
     addDocument,
     updateDocument,
     deleteDocument,
-
-    // Setters for UI state
     setDocumentViewMode,
     setDocumentTypeFilter,
     setDocumentPropertyFilter,
     setShowAddDocumentModal,
-
-    // Setters for loading data from Firebase
     setDocuments,
-
-    // Utilities
     showToast,
   };
 };

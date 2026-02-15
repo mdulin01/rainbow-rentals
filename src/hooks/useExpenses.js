@@ -3,14 +3,14 @@ import { useState, useCallback, useRef } from 'react';
 /**
  * useExpenses Hook
  * Manages expense data and operations
- * Each expense: { id, propertyId, propertyName, category, description, amount, date, vendor, notes, createdAt, createdBy }
+ * All CRUD uses functional state updates (prev =>) to avoid stale closure bugs.
  */
 export const useExpenses = (currentUser, saveExpenses, showToast) => {
   const saveRef = useRef(saveExpenses);
   saveRef.current = saveExpenses;
 
   const [expenses, setExpenses] = useState([]);
-  const [showAddExpenseModal, setShowAddExpenseModal] = useState(null); // null | 'create' | expense object (edit)
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(null);
 
   const addExpense = useCallback((expense) => {
     const newExpense = {
@@ -18,27 +18,31 @@ export const useExpenses = (currentUser, saveExpenses, showToast) => {
       id: expense.id || Date.now().toString(),
       createdAt: expense.createdAt || new Date().toISOString(),
     };
-    const updated = [...expenses, newExpense];
-    setExpenses(updated);
-    saveRef.current(updated);
+    setExpenses(prev => {
+      const updated = [...prev, newExpense];
+      saveRef.current(updated);
+      return updated;
+    });
     showToast('Expense recorded', 'success');
-  }, [expenses, showToast]);
+  }, [showToast]);
 
   const updateExpense = useCallback((expenseId, updates) => {
-    const updated = expenses.map(e =>
-      e.id === expenseId ? { ...e, ...updates } : e
-    );
-    setExpenses(updated);
-    saveRef.current(updated);
+    setExpenses(prev => {
+      const updated = prev.map(e => e.id === expenseId ? { ...e, ...updates } : e);
+      saveRef.current(updated);
+      return updated;
+    });
     showToast('Expense updated', 'success');
-  }, [expenses, showToast]);
+  }, [showToast]);
 
   const deleteExpense = useCallback((expenseId) => {
-    const updated = expenses.filter(e => e.id !== expenseId);
-    setExpenses(updated);
-    saveRef.current(updated);
+    setExpenses(prev => {
+      const updated = prev.filter(e => e.id !== expenseId);
+      saveRef.current(updated);
+      return updated;
+    });
     showToast('Expense deleted', 'info');
-  }, [expenses, showToast]);
+  }, [showToast]);
 
   return {
     expenses,
