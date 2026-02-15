@@ -110,6 +110,14 @@ export const ideaStatuses = [
   { value: 'parked', label: 'Parked', emoji: '🅿️' },
 ];
 
+// Rent payment statuses
+export const rentStatuses = [
+  { value: 'paid', label: 'Paid', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
+  { value: 'partial', label: 'Partial', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+  { value: 'unpaid', label: 'Unpaid', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+  { value: 'late', label: 'Late', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+];
+
 // Property colors for cards
 export const propertyColors = [
   'from-teal-400 to-cyan-500',

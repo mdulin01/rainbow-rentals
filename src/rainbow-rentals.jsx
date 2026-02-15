@@ -5,7 +5,7 @@ import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3
 import {
   ownerEmails, propertyTypes, propertyColors, documentTypes,
   expenseCategories, incomeCategories, taskPriorities, timeHorizons,
-  listCategories, ideaCategories, tenantStatuses
+  listCategories, ideaCategories, tenantStatuses, rentStatuses
 } from './constants';
 import {
   formatDate, formatCurrency, validateFileSize, isHeicFile, getSafeFileName,
@@ -16,7 +16,7 @@ import {
 import LoginScreen from './components/LoginScreen';
 import ConfirmDialog from './components/ConfirmDialog';
 
-// Hub components
+// Hub components (tasks still used on Dashboard)
 import AddTaskModal from './components/SharedHub/AddTaskModal';
 import SharedListModal from './components/SharedHub/SharedListModal';
 import AddIdeaModal from './components/SharedHub/AddIdeaModal';
@@ -30,12 +30,19 @@ import NewPropertyModal from './components/Rentals/NewPropertyModal';
 import PropertyDetail from './components/Rentals/PropertyDetail';
 import TenantModal from './components/Rentals/TenantModal';
 
+// Tenants components
+import TenantsList from './components/Tenants/TenantsList';
+
+// Rent components
+import RentLedger from './components/Rent/RentLedger';
+import AddRentPaymentModal from './components/Rent/AddRentPaymentModal';
+
 // Documents components
 import DocumentCard from './components/Documents/DocumentCard';
 import AddDocumentModal from './components/Documents/AddDocumentModal';
 import DocumentViewer from './components/Documents/DocumentViewer';
 
-// Financials components
+// Financials components (kept for backward compat)
 import TransactionCard from './components/Financials/TransactionCard';
 import AddTransactionModal from './components/Financials/AddTransactionModal';
 import FinancialSummary from './components/Financials/FinancialSummary';
@@ -45,6 +52,7 @@ import { useSharedHub } from './hooks/useSharedHub';
 import { useProperties } from './hooks/useProperties';
 import { useDocuments } from './hooks/useDocuments';
 import { useFinancials } from './hooks/useFinancials';
+import { useRent } from './hooks/useRent';
 
 // Contexts
 import { SharedHubProvider } from './contexts/SharedHubContext';
@@ -94,7 +102,7 @@ export default function RainbowRentals() {
   }, []);
 
   // ========== NAVIGATION ==========
-  const [activeSection, setActiveSection] = useState('home');
+  const [activeSection, setActiveSection] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState('Mike');
   const [isOwner, setIsOwner] = useState(false);
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
@@ -111,6 +119,7 @@ export default function RainbowRentals() {
   const savePropertiesRef = useRef(() => {});
   const saveDocumentsRef = useRef(() => {});
   const saveFinancialsRef = useRef(() => {});
+  const saveRentRef = useRef(() => {});
 
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
@@ -158,6 +167,13 @@ export default function RainbowRentals() {
     addTransaction, updateTransaction, deleteTransaction,
     getTotalIncome, getTotalExpenses, getProfit, getMonthlyBreakdown, getPropertyBreakdown, getFilteredTransactions,
   } = financialsHook;
+
+  const rentHook = useRent(currentUser, saveRentRef.current, showToast);
+  const {
+    rentPayments, setRentPayments,
+    showAddRentModal, setShowAddRentModal,
+    addRentPayment, updateRentPayment, deleteRentPayment,
+  } = rentHook;
 
   // Document viewer
   const [viewingDocument, setViewingDocument] = useState(null);
@@ -271,6 +287,22 @@ export default function RainbowRentals() {
 
   useEffect(() => { saveFinancialsRef.current = saveFinancialsToFirestore; }, [saveFinancialsToFirestore]);
 
+  const saveRentToFirestore = useCallback(async (newRentPayments) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'rentalData', 'rent'), {
+        payments: newRentPayments,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: currentUser
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error saving rent data:', error);
+      showToast('Failed to save rent data.', 'error');
+    }
+  }, [user, currentUser, showToast]);
+
+  useEffect(() => { saveRentRef.current = saveRentToFirestore; }, [saveRentToFirestore]);
+
   // ========== FIRESTORE LOAD (onSnapshot) ==========
   useEffect(() => {
     if (!user) return;
@@ -331,11 +363,24 @@ export default function RainbowRentals() {
       (error) => console.error('Error loading financials:', error)
     );
 
+    // Subscribe to rent payments
+    const rentUnsubscribe = onSnapshot(
+      doc(db, 'rentalData', 'rent'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.payments) setRentPayments(data.payments);
+        }
+      },
+      (error) => console.error('Error loading rent data:', error)
+    );
+
     return () => {
       hubUnsubscribe();
       propertiesUnsubscribe();
       documentsUnsubscribe();
       financialsUnsubscribe();
+      rentUnsubscribe();
     };
   }, [user]);
 
@@ -433,6 +478,8 @@ export default function RainbowRentals() {
       .forEach(d => results.push({ type: 'document', item: d, section: 'documents' }));
     transactions.filter(t => t.description?.toLowerCase().includes(q))
       .forEach(t => results.push({ type: 'transaction', item: t, section: 'financials' }));
+    rentPayments.filter(r => (r.tenantName || '').toLowerCase().includes(q) || (r.propertyName || '').toLowerCase().includes(q) || (r.month || '').includes(q))
+      .forEach(r => results.push({ type: 'rent', item: r, section: 'rent' }));
 
     return results;
   };
@@ -463,7 +510,7 @@ export default function RainbowRentals() {
   // Check if any modal is open (to hide nav)
   const anyModalOpen = showAddTaskModal || showSharedListModal || showAddIdeaModal ||
     showNewPropertyModal || showTenantModal || showAddDocumentModal || showAddTransactionModal ||
-    viewingDocument || selectedProperty;
+    showAddRentModal || viewingDocument || selectedProperty;
 
   // Filter tasks for Hub dashboard
   const pendingTasks = sharedTasks.filter(t => t.status !== 'done');
@@ -548,163 +595,96 @@ export default function RainbowRentals() {
             </div>
           ) : (
             <>
-              {/* ========== HUB SECTION ========== */}
-              {activeSection === 'home' && (
+              {/* ========== DASHBOARD SECTION ========== */}
+              {activeSection === 'dashboard' && (
                 <div>
-                  {/* Sub-nav */}
-                  <div className="flex gap-1.5 mb-4 items-center justify-start sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
-                    {[
-                      { id: 'home', emoji: '🏠' },
-                      { id: 'tasks', emoji: '✅' },
-                      { id: 'lists', emoji: '📋' },
-                      { id: 'ideas', emoji: '💡' },
-                    ].map(tab => (
-                      <button key={tab.id} onClick={() => setHubSubView(tab.id)}
-                        className={`flex-1 md:flex-none px-3 md:px-4 py-2 rounded-xl font-medium transition text-base md:text-lg text-center ${
-                          hubSubView === tab.id ? 'bg-purple-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                        }`}>{tab.emoji}</button>
-                    ))}
+                  <h2 className="text-xl font-bold text-white mb-4">Dashboard</h2>
+
+                  {/* Summary tiles */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <button onClick={() => setActiveSection('rentals')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 text-left hover:bg-white/[0.08] transition cursor-pointer">
+                      <p className="text-white/40 text-xs mb-1">Properties</p>
+                      <p className="text-2xl font-bold text-teal-400">{properties.length}</p>
+                      <p className="text-xs text-white/40">{activeProperties.length} occupied · {vacantProperties.length} vacant</p>
+                    </button>
+                    <button onClick={() => setActiveSection('tenants')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 text-left hover:bg-white/[0.08] transition cursor-pointer">
+                      <p className="text-white/40 text-xs mb-1">Tenants</p>
+                      <p className="text-2xl font-bold text-blue-400">{properties.filter(p => p.tenant && p.tenant.name).length}</p>
+                      <p className="text-xs text-white/40">{properties.filter(p => p.tenant?.status === 'active').length} active</p>
+                    </button>
+                    <button onClick={() => setActiveSection('rent')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 text-left hover:bg-white/[0.08] transition cursor-pointer">
+                      <p className="text-white/40 text-xs mb-1">Monthly Rent Expected</p>
+                      <p className="text-2xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => sum + (p.tenant?.monthlyRent || p.monthlyRent || 0), 0))}</p>
+                    </button>
+                    <button onClick={() => setActiveSection('rent')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 text-left hover:bg-white/[0.08] transition cursor-pointer">
+                      <p className="text-white/40 text-xs mb-1">Late Payments</p>
+                      <p className="text-2xl font-bold text-orange-400">{rentPayments.filter(r => r.status === 'late').length}</p>
+                      <p className="text-xs text-white/40">{rentPayments.filter(r => r.status === 'unpaid').length} unpaid</p>
+                    </button>
                   </div>
 
-                  {/* Hub Home Dashboard */}
-                  {hubSubView === 'home' && (
-                    <div className="space-y-4">
-                      {/* Quick stats */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
-                          <p className="text-white/40 text-xs mb-1">Properties</p>
-                          <p className="text-2xl font-bold text-teal-400">{properties.length}</p>
-                          <p className="text-xs text-white/40">{vacantProperties.length} vacant</p>
-                        </div>
-                        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
-                          <p className="text-white/40 text-xs mb-1">Tasks Due Today</p>
-                          <p className="text-2xl font-bold text-amber-400">{todayTasks.length}</p>
-                          <p className="text-xs text-white/40">{overdueTasks.length} overdue</p>
-                        </div>
-                        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
-                          <p className="text-white/40 text-xs mb-1">Monthly Income</p>
-                          <p className="text-2xl font-bold text-emerald-400">{formatCurrency(getTotalIncome())}</p>
-                        </div>
-                        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
-                          <p className="text-white/40 text-xs mb-1">Net Profit</p>
-                          <p className={`text-2xl font-bold ${getProfit() >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(getProfit())}</p>
-                        </div>
-                      </div>
-
-                      {/* Recent tasks */}
-                      {pendingTasks.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-white/60 mb-2 uppercase tracking-wide">Upcoming Tasks</h3>
-                          <div className="space-y-2">
-                            {pendingTasks.slice(0, 5).map(task => (
-                              <TaskCard
-                                key={task.id}
-                                task={task}
-                                onComplete={() => completeTask(task.id)}
-                                onEdit={() => setShowAddTaskModal(task)}
-                                onDelete={() => deleteTask(task.id)}
-                                onHighlight={() => highlightTask(task.id)}
-                                showToast={showToast}
-                                currentUser={currentUser}
-                                getEventLabel={() => null}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Vacant properties alert */}
-                      {vacantProperties.length > 0 && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-                          <h3 className="text-sm font-semibold text-red-400 mb-2">Vacant Properties</h3>
-                          {vacantProperties.map(p => (
-                            <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
-                              className="block text-sm text-white/70 hover:text-white transition py-1">
-                              {p.emoji || '🏠'} {p.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  {/* Vacant properties alert */}
+                  {vacantProperties.length > 0 && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6">
+                      <h3 className="text-sm font-semibold text-red-400 mb-2">Vacant Properties</h3>
+                      {vacantProperties.map(p => (
+                        <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
+                          className="block text-sm text-white/70 hover:text-white transition py-1">
+                          {p.emoji || '🏠'} {p.name}
+                        </button>
+                      ))}
                     </div>
                   )}
 
-                  {/* Tasks View */}
-                  {hubSubView === 'tasks' && (
-                    <div>
-                      <div className="flex gap-2 mb-4 flex-wrap">
-                        {timeHorizons.map(h => (
-                          <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                              hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
-                            }`}>{h.label}</button>
+                  {/* To-Do List */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">To-Do List</h3>
+                      <button onClick={() => setShowAddTaskModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ Add Task</button>
+                    </div>
+
+                    {/* Task filters */}
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                      {timeHorizons.map(h => (
+                        <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                            hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
+                          }`}>{h.label}</button>
+                      ))}
+                    </div>
+
+                    {/* Task list */}
+                    <div className="space-y-2">
+                      {sharedTasks
+                        .filter(t => t.status !== 'done')
+                        .filter(t => taskMatchesHorizon(t, hubTaskFilter))
+                        .sort((a, b) => {
+                          // Sort by priority: high first, then medium, then low
+                          const pOrder = { high: 0, medium: 1, low: 2 };
+                          const pa = pOrder[a.priority] ?? 2;
+                          const pb = pOrder[b.priority] ?? 2;
+                          if (pa !== pb) return pa - pb;
+                          // Then by due date
+                          return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+                        })
+                        .map(task => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            onComplete={() => completeTask(task.id)}
+                            onEdit={() => setShowAddTaskModal(task)}
+                            onDelete={() => deleteTask(task.id)}
+                            onHighlight={() => highlightTask(task.id)}
+                            showToast={showToast}
+                            currentUser={currentUser}
+                            getEventLabel={() => getPropertyName(task.linkedTo?.propertyId)}
+                          />
                         ))}
-                      </div>
-                      <div className="space-y-2">
-                        {sharedTasks
-                          .filter(t => t.status !== 'done')
-                          .filter(t => taskMatchesHorizon(t, hubTaskFilter))
-                          .map(task => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              onComplete={() => completeTask(task.id)}
-                              onEdit={() => setShowAddTaskModal(task)}
-                              onDelete={() => deleteTask(task.id)}
-                              onHighlight={() => highlightTask(task.id)}
-                              showToast={showToast}
-                              currentUser={currentUser}
-                              getEventLabel={() => null}
-                            />
-                          ))}
-                        {sharedTasks.filter(t => t.status !== 'done').filter(t => taskMatchesHorizon(t, hubTaskFilter)).length === 0 && (
-                          <p className="text-center text-white/30 py-8">No tasks match this filter</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lists View */}
-                  {hubSubView === 'lists' && (
-                    <div className="space-y-2">
-                      {sharedLists.map(list => (
-                        <ListCard
-                          key={list.id}
-                          list={list}
-                          onEdit={() => setShowSharedListModal(list)}
-                          onDelete={() => deleteList(list.id)}
-                          onToggleItem={(itemId) => toggleListItem(list.id, itemId)}
-                          onDeleteItem={(itemId) => deleteListItem(list.id, itemId)}
-                          onHighlight={() => highlightList(list.id)}
-                          showToast={showToast}
-                          currentUser={currentUser}
-                        />
-                      ))}
-                      {sharedLists.length === 0 && (
-                        <p className="text-center text-white/30 py-8">No lists yet</p>
+                      {sharedTasks.filter(t => t.status !== 'done').filter(t => taskMatchesHorizon(t, hubTaskFilter)).length === 0 && (
+                        <p className="text-center text-white/30 py-8">No tasks match this filter</p>
                       )}
                     </div>
-                  )}
-
-                  {/* Ideas View */}
-                  {hubSubView === 'ideas' && (
-                    <div className="space-y-2">
-                      {sharedIdeas.map(idea => (
-                        <IdeaCard
-                          key={idea.id}
-                          idea={idea}
-                          onEdit={() => setShowAddIdeaModal(idea)}
-                          onDelete={() => deleteIdea(idea.id)}
-                          onHighlight={() => highlightIdea(idea.id)}
-                          onPromoteToTask={() => promoteIdeaToTask(idea)}
-                          showToast={showToast}
-                          currentUser={currentUser}
-                        />
-                      ))}
-                      {sharedIdeas.length === 0 && (
-                        <p className="text-center text-white/30 py-8">No ideas yet</p>
-                      )}
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -831,6 +811,50 @@ export default function RainbowRentals() {
                     </>
                   )}
                 </div>
+              )}
+
+              {/* ========== TENANTS SECTION ========== */}
+              {activeSection === 'tenants' && (
+                <TenantsList
+                  properties={properties}
+                  onEditTenant={(propertyId) => {
+                    const prop = properties.find(p => String(p.id) === String(propertyId));
+                    if (prop) setShowTenantModal(prop);
+                  }}
+                  onAddTenant={() => {
+                    // Open tenant modal for first property or show property selector
+                    if (properties.length === 1) {
+                      setShowTenantModal(properties[0]);
+                    } else if (properties.length > 1) {
+                      // Create a temp state to pick property first
+                      setShowTenantModal({ _pickProperty: true });
+                    } else {
+                      showToast('Add a property first', 'info');
+                    }
+                  }}
+                  onViewProperty={(propertyId) => {
+                    const prop = properties.find(p => String(p.id) === String(propertyId));
+                    if (prop) { setActiveSection('rentals'); setSelectedProperty(prop); }
+                  }}
+                />
+              )}
+
+              {/* ========== RENT SECTION ========== */}
+              {activeSection === 'rent' && (
+                <RentLedger
+                  rentPayments={rentPayments}
+                  properties={properties}
+                  onAdd={() => setShowAddRentModal('create')}
+                  onEdit={(payment) => setShowAddRentModal(payment)}
+                  onDelete={(paymentId) => {
+                    setConfirmDialog({
+                      title: 'Delete Payment',
+                      message: 'Delete this rent payment record?',
+                      onConfirm: () => { deleteRentPayment(paymentId); setConfirmDialog(null); },
+                    });
+                  }}
+                  showToast={showToast}
+                />
               )}
 
               {/* ========== DOCUMENTS SECTION ========== */}
@@ -1188,6 +1212,30 @@ export default function RainbowRentals() {
           />
         )}
 
+        {/* Rent Payment Modal */}
+        {showAddRentModal && (
+          <AddRentPaymentModal
+            payment={typeof showAddRentModal === 'object' ? showAddRentModal : null}
+            properties={properties}
+            onSave={(paymentData) => {
+              if (typeof showAddRentModal === 'object' && showAddRentModal.id) {
+                updateRentPayment(showAddRentModal.id, paymentData);
+              } else {
+                addRentPayment({ ...paymentData, id: Date.now().toString(), createdAt: new Date().toISOString(), createdBy: currentUser });
+              }
+              setShowAddRentModal(null);
+            }}
+            onDelete={(paymentId) => {
+              setConfirmDialog({
+                title: 'Delete Payment',
+                message: 'Delete this rent payment record?',
+                onConfirm: () => { deleteRentPayment(paymentId); setShowAddRentModal(null); setConfirmDialog(null); },
+              });
+            }}
+            onClose={() => setShowAddRentModal(null)}
+          />
+        )}
+
         {/* Confirm Dialog */}
         {confirmDialog && (
           <ConfirmDialog
@@ -1220,11 +1268,11 @@ export default function RainbowRentals() {
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
+                      { action: () => setShowNewPropertyModal('create'), icon: '🏠', label: 'Property', gradient: 'from-teal-400 to-cyan-500' },
+                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Rent', gradient: 'from-emerald-400 to-green-500' },
+                      { action: () => setShowAddDocumentModal('create'), icon: '📄', label: 'Document', gradient: 'from-amber-400 to-orange-500' },
                       { action: () => setShowSharedListModal('create'), icon: '📋', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
                       { action: () => setShowAddIdeaModal('create'), icon: '💡', label: 'Idea', gradient: 'from-yellow-400 to-amber-500' },
-                      { action: () => setShowNewPropertyModal('create'), icon: '🏠', label: 'Property', gradient: 'from-teal-400 to-cyan-500' },
-                      { action: () => setShowAddDocumentModal('create'), icon: '📄', label: 'Document', gradient: 'from-amber-400 to-orange-500' },
-                      { action: () => setShowAddTransactionModal('create'), icon: '💰', label: 'Transaction', gradient: 'from-emerald-400 to-green-500' },
                     ].map((item, idx) => (
                       <button key={item.label} onClick={() => { setShowAddNewMenu(false); item.action(); }}
                         className="flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl hover:bg-white/10 transition active:scale-95"
@@ -1263,11 +1311,11 @@ export default function RainbowRentals() {
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
+                      { action: () => setShowNewPropertyModal('create'), icon: '🏠', label: 'Property', gradient: 'from-teal-400 to-cyan-500' },
+                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Rent', gradient: 'from-emerald-400 to-green-500' },
+                      { action: () => setShowAddDocumentModal('create'), icon: '📄', label: 'Document', gradient: 'from-amber-400 to-orange-500' },
                       { action: () => setShowSharedListModal('create'), icon: '📋', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
                       { action: () => setShowAddIdeaModal('create'), icon: '💡', label: 'Idea', gradient: 'from-yellow-400 to-amber-500' },
-                      { action: () => setShowNewPropertyModal('create'), icon: '🏠', label: 'Property', gradient: 'from-teal-400 to-cyan-500' },
-                      { action: () => setShowAddDocumentModal('create'), icon: '📄', label: 'Document', gradient: 'from-amber-400 to-orange-500' },
-                      { action: () => setShowAddTransactionModal('create'), icon: '💰', label: 'Transaction', gradient: 'from-emerald-400 to-green-500' },
                     ].map((item, idx) => {
                       const row = Math.floor(idx / 3);
                       const delay = (1 - row) * 0.04 + (idx % 3) * 0.015;
@@ -1311,16 +1359,16 @@ export default function RainbowRentals() {
               {/* Tab buttons */}
               <div className="flex items-end justify-around px-1 pt-1 pb-1">
                 {[
-                  { id: 'home', label: 'Hub', emoji: '⚛️', gradient: 'from-purple-500 to-violet-500' },
+                  { id: 'dashboard', label: 'Home', emoji: '📊', gradient: 'from-purple-500 to-violet-500' },
                   { id: 'rentals', label: 'Rentals', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
+                  { id: 'tenants', label: 'Tenants', emoji: '👤', gradient: 'from-blue-400 to-indigo-500' },
+                  { id: 'rent', label: 'Rent', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
                   { id: 'documents', label: 'Docs', emoji: '📄', gradient: 'from-amber-400 to-orange-500' },
-                  { id: 'financials', label: 'Money', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
                 ].map((section) => (
                   <button
                     key={section.id}
                     onClick={() => {
                       setActiveSection(section.id);
-                      if (section.id === 'home') setHubSubView('home');
                       if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
                       setShowAddNewMenu(false);
                     }}
