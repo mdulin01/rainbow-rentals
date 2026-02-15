@@ -788,6 +788,7 @@ export default function RainbowRentals() {
                       onBack={() => setSelectedProperty(null)}
                       onEdit={() => setShowNewPropertyModal(selectedProperty)}
                       onEditTenant={() => setShowTenantModal(selectedProperty)}
+                      onAddTenant={() => setShowTenantModal(selectedProperty)}
                       onRemoveTenant={() => {
                         removeTenant(selectedProperty.id);
                         setSelectedProperty({ ...selectedProperty, tenant: null });

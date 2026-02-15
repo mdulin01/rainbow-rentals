@@ -4,7 +4,8 @@ import { tenantStatuses } from '../../constants';
 
 const TenantModal = ({ property, tenant, onSave, onClose }) => {
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     leaseStart: '',
@@ -17,7 +18,25 @@ const TenantModal = ({ property, tenant, onSave, onClose }) => {
   // Pre-fill if editing
   useEffect(() => {
     if (tenant) {
-      setFormData(tenant);
+      // Support legacy data that only has `name` (no firstName/lastName)
+      let firstName = tenant.firstName || '';
+      let lastName = tenant.lastName || '';
+      if (!firstName && !lastName && tenant.name) {
+        const parts = tenant.name.trim().split(/\s+/);
+        firstName = parts[0] || '';
+        lastName = parts.slice(1).join(' ') || '';
+      }
+      setFormData({
+        firstName,
+        lastName,
+        email: tenant.email || '',
+        phone: tenant.phone || '',
+        leaseStart: tenant.leaseStart || '',
+        leaseEnd: tenant.leaseEnd || '',
+        monthlyRent: tenant.monthlyRent || '',
+        securityDeposit: tenant.securityDeposit || '',
+        status: tenant.status || 'pending',
+      });
     } else {
       resetForm();
     }
@@ -25,7 +44,8 @@ const TenantModal = ({ property, tenant, onSave, onClose }) => {
 
   const resetForm = () => {
     setFormData({
-      name: '',
+      firstName: '',
+      lastName: '',
       email: '',
       phone: '',
       leaseStart: '',
@@ -45,11 +65,16 @@ const TenantModal = ({ property, tenant, onSave, onClose }) => {
   };
 
   const handleSave = () => {
-    if (!formData.name.trim()) {
-      alert('Tenant name is required');
+    if (!formData.firstName.trim()) {
+      alert('First name is required');
       return;
     }
-    onSave(formData);
+    // Compose full name for backward compat
+    const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
+    onSave({
+      ...formData,
+      name: fullName,
+    });
   };
 
   return (
@@ -58,7 +83,7 @@ const TenantModal = ({ property, tenant, onSave, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 bg-slate-800 border-b border-white/15">
           <h2 className="text-2xl font-bold text-white">
-            {tenant?.name ? 'Edit Tenant' : 'Add Tenant'}
+            {tenant?.name || tenant?.firstName ? 'Edit Tenant' : 'Add Tenant'}
           </h2>
           <button
             onClick={onClose}
@@ -75,13 +100,25 @@ const TenantModal = ({ property, tenant, onSave, onClose }) => {
             <h3 className="text-white font-semibold mb-4">Personal Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-400 text-sm mb-2">Full Name *</label>
+                <label className="block text-slate-400 text-sm mb-2">First Name *</label>
                 <input
                   type="text"
-                  name="name"
-                  value={formData.name}
+                  name="firstName"
+                  value={formData.firstName}
                   onChange={handleChange}
-                  placeholder="John Doe"
+                  placeholder="John"
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  placeholder="Doe"
                   className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
                 />
               </div>
