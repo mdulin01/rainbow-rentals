@@ -20,7 +20,7 @@ export const useSharedHub = (currentUser, saveSharedHub, showToast) => {
 
   // Hub UI state
   const [hubSubView, setHubSubView] = useState('home');
-  const [hubTaskFilter, setHubTaskFilter] = useState('today');
+  const [hubTaskFilter, setHubTaskFilter] = useState('all');
   const [hubTaskSort, setHubTaskSort] = useState('date');
   const [hubListFilter, setHubListFilter] = useState('all');
   const [hubIdeaFilter, setHubIdeaFilter] = useState('all');

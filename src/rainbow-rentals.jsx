@@ -786,14 +786,26 @@ export default function RainbowRentals() {
                       <button onClick={() => setShowAddTaskModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ Add Task</button>
                     </div>
 
-                    {/* Task filters */}
-                    <div className="flex gap-2 mb-3 flex-wrap">
-                      {timeHorizons.map(h => (
-                        <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                            hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
-                          }`}>{h.label}</button>
-                      ))}
+                    {/* Task filters + sort */}
+                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {timeHorizons.map(h => (
+                          <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                              hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
+                            }`}>{h.label}</button>
+                        ))}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => setHubTaskSort('priority')}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+                            hubTaskSort === 'priority' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                          }`}>Priority</button>
+                        <button onClick={() => setHubTaskSort('date')}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+                            hubTaskSort === 'date' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                          }`}>Due Date</button>
+                      </div>
                     </div>
 
                     {/* Task list */}
@@ -802,13 +814,21 @@ export default function RainbowRentals() {
                         .filter(t => t.status !== 'done')
                         .filter(t => taskMatchesHorizon(t, hubTaskFilter))
                         .sort((a, b) => {
-                          // Sort by priority: high first, then medium, then low
-                          const pOrder = { high: 0, medium: 1, low: 2 };
-                          const pa = pOrder[a.priority] ?? 2;
-                          const pb = pOrder[b.priority] ?? 2;
-                          if (pa !== pb) return pa - pb;
-                          // Then by due date
-                          return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+                          if (hubTaskSort === 'date') {
+                            // Sort by due date first, then priority
+                            const da = a.dueDate || '9999';
+                            const db = b.dueDate || '9999';
+                            if (da !== db) return da.localeCompare(db);
+                            const pOrder = { high: 0, medium: 1, low: 2 };
+                            return (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
+                          } else {
+                            // Sort by priority first, then due date
+                            const pOrder = { high: 0, medium: 1, low: 2 };
+                            const pa = pOrder[a.priority] ?? 2;
+                            const pb = pOrder[b.priority] ?? 2;
+                            if (pa !== pb) return pa - pb;
+                            return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+                          }
                         })
                         .map(task => (
                           <TaskCard
