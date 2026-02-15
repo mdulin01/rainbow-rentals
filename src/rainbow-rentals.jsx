@@ -455,12 +455,12 @@ export default function RainbowRentals() {
     setUploadingPropertyPhoto(propertyId);
     try {
       const url = await uploadPhoto(file, 'rentals/properties');
-      const property = properties.find(p => p.id === propertyId);
-      if (property) {
-        const photos = [...(property.photos || []), { id: Date.now(), url, addedAt: new Date().toISOString() }];
-        updateProperty(propertyId, { photos });
-        showToast('Photo added!', 'success');
-      }
+      // Use updateProperty with functional update - it will work with latest state
+      // No need to find property from stale closure
+      updateProperty(propertyId, (currentProperty) => ({
+        photos: [...(currentProperty.photos || []), { id: Date.now(), url, addedAt: new Date().toISOString() }],
+      }));
+      showToast('Photo added!', 'success');
     } catch (error) {
       console.error('Property photo upload failed:', error);
       showToast('Photo upload failed', 'error');

@@ -20,60 +20,85 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
   const [showTenantModal, setShowTenantModal] = useState(null); // null | { propertyId, tenantData } (edit) | { propertyId } (create)
 
   // ========== PROPERTY CRUD ==========
-  const addProperty = useCallback((property) => {
-    const newProperties = [...properties, property];
-    setProperties(newProperties);
-    saveRef.current(newProperties);
-    showToast('Property added', 'success');
-  }, [properties, showToast]);
+  // All CRUD functions use functional state updates (prev =>) to avoid stale closure bugs.
+  // This is critical because async operations (e.g. photo uploads) can complete after
+  // properties state has changed, and stale closures would overwrite newer data.
 
+  const addProperty = useCallback((property) => {
+    setProperties(prev => {
+      const newProperties = [...prev, property];
+      saveRef.current(newProperties);
+      return newProperties;
+    });
+    showToast('Property added', 'success');
+  }, [showToast]);
+
+  // updates can be an object OR a function (currentProperty) => partialUpdates
   const updateProperty = useCallback((propertyId, updates) => {
-    const newProperties = properties.map(p => p.id === propertyId ? { ...p, ...updates } : p);
-    setProperties(newProperties);
-    saveRef.current(newProperties);
-  }, [properties]);
+    setProperties(prev => {
+      const newProperties = prev.map(p => {
+        if (String(p.id) === String(propertyId)) {
+          const resolved = typeof updates === 'function' ? updates(p) : updates;
+          return { ...p, ...resolved };
+        }
+        return p;
+      });
+      saveRef.current(newProperties);
+      return newProperties;
+    });
+  }, []);
 
   const deleteProperty = useCallback((propertyId) => {
-    const newProperties = properties.filter(p => p.id !== propertyId);
-    setProperties(newProperties);
-    saveRef.current(newProperties);
+    setProperties(prev => {
+      const newProperties = prev.filter(p => String(p.id) !== String(propertyId));
+      saveRef.current(newProperties);
+      return newProperties;
+    });
     showToast('Property deleted', 'info');
     if (selectedProperty?.id === propertyId) {
       setSelectedProperty(null);
     }
-  }, [properties, selectedProperty, showToast]);
+  }, [selectedProperty, showToast]);
 
   // ========== TENANT CRUD ==========
   const updateTenant = useCallback((propertyId, tenantData) => {
     let matched = false;
-    const newProperties = properties.map(p => {
-      if (String(p.id) === String(propertyId)) {
-        matched = true;
-        return { ...p, tenant: { ...p.tenant, ...tenantData } };
+    setProperties(prev => {
+      const newProperties = prev.map(p => {
+        if (String(p.id) === String(propertyId)) {
+          matched = true;
+          return { ...p, tenant: { ...p.tenant, ...tenantData } };
+        }
+        return p;
+      });
+      if (matched) {
+        saveRef.current(newProperties);
+        return newProperties;
       }
-      return p;
+      return prev; // don't update state if nothing matched
     });
+    // Toast after setState (matched will be set by the updater since it runs sync)
     if (matched) {
-      setProperties(newProperties);
-      saveRef.current(newProperties);
       showToast('Tenant saved', 'success');
     } else {
       console.error('updateTenant: no property matched id', propertyId);
       showToast('Error: property not found', 'error');
     }
-  }, [properties, showToast]);
+  }, [showToast]);
 
   const removeTenant = useCallback((propertyId) => {
-    const newProperties = properties.map(p => {
-      if (p.id === propertyId) {
-        return { ...p, tenant: null };
-      }
-      return p;
+    setProperties(prev => {
+      const newProperties = prev.map(p => {
+        if (String(p.id) === String(propertyId)) {
+          return { ...p, tenant: null };
+        }
+        return p;
+      });
+      saveRef.current(newProperties);
+      return newProperties;
     });
-    setProperties(newProperties);
-    saveRef.current(newProperties);
     showToast('Tenant removed', 'info');
-  }, [properties, showToast]);
+  }, [showToast]);
 
   // ========== RETURN CONTEXT VALUE ==========
   return {
