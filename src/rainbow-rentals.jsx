@@ -582,6 +582,8 @@ export default function RainbowRentals() {
   // Filter properties by status - use propertyStatus if set, otherwise derive from tenant
   const getEffectiveStatus = (p) => p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant');
   const vacantProperties = properties.filter(p => getEffectiveStatus(p) === 'vacant');
+  const renovationProperties = properties.filter(p => getEffectiveStatus(p) === 'renovation');
+  const notCollectingRent = properties.filter(p => ['vacant', 'renovation'].includes(getEffectiveStatus(p)));
   const activeProperties = properties.filter(p => getEffectiveStatus(p) === 'occupied');
   const leaseExpiredProperties = properties.filter(p => getEffectiveStatus(p) === 'lease-expired');
   const monthToMonthProperties = properties.filter(p => getEffectiveStatus(p) === 'month-to-month');
@@ -729,9 +731,9 @@ export default function RainbowRentals() {
                     return (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                         <button onClick={() => setActiveSection('rentals')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
-                          <p className="text-white/40 text-xs mb-1">Vacant</p>
-                          <p className={`text-2xl font-bold ${vacantProperties.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{vacantProperties.length}</p>
-                          <p className="text-xs text-white/40">{properties.length} total</p>
+                          <p className="text-white/40 text-xs mb-1">Not Collecting Rent</p>
+                          <p className={`text-2xl font-bold ${notCollectingRent.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{notCollectingRent.length}</p>
+                          <p className="text-xs text-white/40">{vacantProperties.length > 0 ? `${vacantProperties.length} vacant` : ''}{vacantProperties.length > 0 && renovationProperties.length > 0 ? ' · ' : ''}{renovationProperties.length > 0 ? `${renovationProperties.length} reno` : ''}{notCollectingRent.length === 0 ? 'All collecting' : ''}</p>
                         </button>
                         <button onClick={() => setActiveSection('rent')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
                           <p className="text-white/40 text-xs mb-1">Rent Collected</p>
