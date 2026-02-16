@@ -83,12 +83,8 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
     );
   };
 
-  // Summary stats
-  const totalExpected = properties.reduce((sum, p) => {
-    const tenants = getPropertyTenants(p);
-    if (tenants.length > 0) return sum + tenants.reduce((ts, t) => ts + (parseFloat(t.monthlyRent) || 0), 0);
-    return sum + (parseFloat(p.monthlyRent) || 0);
-  }, 0);
+  // Summary stats - use property-level monthlyRent (total per property, not per-tenant)
+  const totalExpected = properties.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0);
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const thisMonthPayments = rentPayments.filter(r => r.month === currentMonth);

@@ -42,13 +42,13 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
     const prop = properties.find(p => String(p.id) === String(propertyId));
     const tenants = prop ? getPropertyTenants(prop) : [];
     const tenantNames = tenants.map(t => t.name).filter(Boolean).join(', ');
-    const totalRent = tenants.reduce((sum, t) => sum + (parseFloat(t.monthlyRent) || 0), 0);
+    // Use property-level monthlyRent (total for the property, not per-tenant)
     setForm(f => ({
       ...f,
       propertyId,
       propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
       tenantName: tenantNames || '',
-      amount: f.amount || (totalRent || prop?.monthlyRent || ''),
+      amount: f.amount || (prop?.monthlyRent || ''),
     }));
   };
 
