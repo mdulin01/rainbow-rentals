@@ -57,7 +57,7 @@ import { useProperties, getPropertyTenants } from './hooks/useProperties';
 import { useDocuments } from './hooks/useDocuments';
 import { useFinancials } from './hooks/useFinancials';
 import { useRent } from './hooks/useRent';
-import { useExpenses } from './hooks/useExpenses';
+import { useExpenses, autoCreateRecurringExpenses } from './hooks/useExpenses';
 
 // Contexts
 import { SharedHubProvider } from './contexts/SharedHubContext';
@@ -425,6 +425,20 @@ export default function RainbowRentals() {
       expensesUnsubscribe();
     };
   }, [user]);
+
+  // ========== AUTO-CREATE RECURRING EXPENSES ==========
+  const autoCreateDoneRef = useRef(false);
+  useEffect(() => {
+    if (!user || expenses.length === 0 || autoCreateDoneRef.current) return;
+    autoCreateDoneRef.current = true;
+    const newExpenses = autoCreateRecurringExpenses(expenses);
+    if (newExpenses.length > 0) {
+      const updated = [...expenses, ...newExpenses];
+      setExpenses(updated);
+      saveExpensesRef.current(updated);
+      showToast(`Auto-created ${newExpenses.length} recurring expense(s)`, 'success');
+    }
+  }, [user, expenses]);
 
   // ========== PHOTO UPLOAD HELPER ==========
   const uploadPhoto = async (file, prefix = 'rentals') => {

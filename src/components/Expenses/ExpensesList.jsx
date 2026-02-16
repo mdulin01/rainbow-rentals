@@ -1,7 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { expenseCategories } from '../../constants';
+import { Search, Plus, ChevronDown, ChevronUp, RefreshCw, Pencil, Trash2, Calendar } from 'lucide-react';
+import { expenseCategories, recurringFrequencies } from '../../constants';
 import { formatDate, formatCurrency } from '../../utils';
+
+// Ordinal suffix helper
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDelete, showToast }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -10,9 +17,13 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
   const [sortCol, setSortCol] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
 
-  // Filter
+  // Separate templates from regular expenses
+  const templates = useMemo(() => expenses.filter(e => e.isTemplate === true), [expenses]);
+  const regularExpenses = useMemo(() => expenses.filter(e => e.isTemplate !== true), [expenses]);
+
+  // Filter (regular expenses only)
   const filtered = useMemo(() => {
-    let result = [...expenses];
+    let result = [...regularExpenses];
     if (categoryFilter !== 'all') result = result.filter(e => e.category === categoryFilter);
     if (propertyFilter !== 'all') result = result.filter(e => e.propertyId === propertyFilter);
     if (searchQuery) {
@@ -25,7 +36,7 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
       );
     }
     return result;
-  }, [expenses, categoryFilter, propertyFilter, searchQuery]);
+  }, [regularExpenses, categoryFilter, propertyFilter, searchQuery]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -68,16 +79,24 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
     );
   };
 
-  // Summary stats
-  const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  // Summary stats (regular expenses only)
+  const totalExpenses = regularExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const currentYear = new Date().getFullYear().toString();
-  const ytdExpenses = expenses
+  const ytdExpenses = regularExpenses
     .filter(e => (e.date || '').startsWith(currentYear))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-  const monthExpenses = expenses
+  const monthExpenses = regularExpenses
     .filter(e => (e.date || '').startsWith(currentMonth))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Monthly recurring total
+  const monthlyRecurringTotal = templates.reduce((sum, t) => {
+    const amt = t.amount || 0;
+    if (t.recurringFrequency === 'quarterly') return sum + amt / 3;
+    if (t.recurringFrequency === 'annually') return sum + amt / 12;
+    return sum + amt;
+  }, 0);
 
   return (
     <div>
@@ -85,7 +104,7 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-white">Expenses</h2>
-          <p className="text-xs text-white/40">{expenses.length} expense records</p>
+          <p className="text-xs text-white/40">{regularExpenses.length} expenses · {templates.length} recurring bills</p>
         </div>
         <button
           onClick={onAdd}
@@ -96,7 +115,7 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
       </div>
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
           <p className="text-white/40 text-xs mb-1">This Month</p>
           <p className="text-xl font-bold text-red-400">{formatCurrency(monthExpenses)}</p>
@@ -109,7 +128,70 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
           <p className="text-white/40 text-xs mb-1">All Time</p>
           <p className="text-xl font-bold text-white">{formatCurrency(totalExpenses)}</p>
         </div>
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
+          <p className="text-white/40 text-xs mb-1">Monthly Recurring</p>
+          <p className="text-xl font-bold text-blue-400">{formatCurrency(monthlyRecurringTotal)}</p>
+        </div>
       </div>
+
+      {/* Recurring Bills Templates */}
+      {templates.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <RefreshCw className="w-4 h-4 text-blue-400" />
+            <h3 className="text-sm font-semibold text-blue-300">Recurring Bills</h3>
+            <span className="text-xs text-white/30">{templates.length} active</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {templates.map(t => {
+              const cat = expenseCategories.find(c => c.value === t.category);
+              const freq = recurringFrequencies.find(f => f.value === t.recurringFrequency);
+              return (
+                <div
+                  key={t.id}
+                  className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 hover:bg-blue-500/10 transition group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">{cat?.emoji || '📋'}</span>
+                        <span className="text-sm font-medium text-white truncate">{t.description || cat?.label || 'Untitled'}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-red-400">{formatCurrency(t.amount || 0)}</span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300">{freq?.label || 'Monthly'}</span>
+                        <span className="flex items-center gap-1 text-white/40">
+                          <Calendar className="w-3 h-3" />
+                          {ordinal(t.dueDay || 1)}
+                        </span>
+                        {t.propertyName && (
+                          <span className="text-white/40 truncate max-w-[120px]">{t.propertyName}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition ml-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(t); }}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70"
+                        title="Edit template"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                        className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-400"
+                        title="Delete template"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -187,7 +269,7 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
                     <td className="px-4 py-3">
                       <span className="text-sm font-medium text-white">
                         {exp.description || '—'}
-                        {exp.recurring && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 align-middle">🔄 {exp.recurringFrequency || 'recurring'}</span>}
+                        {exp.generatedFromTemplate && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300/70 align-middle">🔄 auto</span>}
                         {exp.receiptPhoto && <span className="ml-1.5 text-[10px] text-white/30 align-middle">📸</span>}
                       </span>
                       {exp.category === 'mileage' && exp.miles && (

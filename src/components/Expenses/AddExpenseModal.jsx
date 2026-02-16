@@ -18,6 +18,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
     receiptPhoto: '',
     recurring: false,
     recurringFrequency: 'monthly',
+    dueDay: '',
     // Mileage-specific fields
     miles: '',
     tripFrom: '',
@@ -41,6 +42,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
         receiptPhoto: expense.receiptPhoto || '',
         recurring: expense.recurring || false,
         recurringFrequency: expense.recurringFrequency || 'monthly',
+        dueDay: expense.dueDay || '',
         miles: expense.miles || '',
         tripFrom: expense.tripFrom || '',
         tripTo: expense.tripTo || '',
@@ -139,6 +141,11 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
     } else {
       if (!form.description.trim()) return;
     }
+    // Validate dueDay for recurring
+    if (form.recurring) {
+      const day = parseInt(form.dueDay);
+      if (!day || day < 1 || day > 31) return;
+    }
     onSave({
       ...form,
       amount: parseFloat(form.amount) || 0,
@@ -149,6 +156,8 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
       receiptPhoto: form.receiptPhoto || '',
       recurring: form.recurring || false,
       recurringFrequency: form.recurring ? form.recurringFrequency : undefined,
+      dueDay: form.recurring ? parseInt(form.dueDay) : undefined,
+      isTemplate: form.recurring ? true : undefined,
     });
   };
 
@@ -158,7 +167,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
       <div className="relative w-full max-w-md bg-slate-800 border border-white/10 rounded-t-3xl md:rounded-3xl p-6 max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">{isEditing ? 'Edit Expense' : 'Record Expense'}</h2>
+          <h2 className="text-lg font-bold text-white">{isEditing ? (expense?.isTemplate ? 'Edit Recurring Bill' : 'Edit Expense') : 'Record Expense'}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20">
             <X className="w-4 h-4 text-white/60" />
           </button>
@@ -184,31 +193,50 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
           </div>
 
           {/* Recurring toggle */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setForm(f => ({ ...f, recurring: !f.recurring }))}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition border ${
-                form.recurring
-                  ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
-                  : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
-              }`}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Recurring
-            </button>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setForm(f => ({ ...f, recurring: !f.recurring }))}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition border ${
+                  form.recurring
+                    ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                    : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
+                }`}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Recurring
+              </button>
+              {form.recurring && (
+                <div className="flex gap-1.5">
+                  {recurringFrequencies.map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setForm(prev => ({ ...prev, recurringFrequency: f.value }))}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                        form.recurringFrequency === f.value
+                          ? 'bg-blue-500/30 text-blue-300'
+                          : 'bg-white/[0.05] text-white/40 hover:bg-white/10'
+                      }`}
+                    >{f.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
             {form.recurring && (
-              <div className="flex gap-1.5">
-                {recurringFrequencies.map(f => (
-                  <button
-                    key={f.value}
-                    onClick={() => setForm(prev => ({ ...prev, recurringFrequency: f.value }))}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                      form.recurringFrequency === f.value
-                        ? 'bg-blue-500/30 text-blue-300'
-                        : 'bg-white/[0.05] text-white/40 hover:bg-white/10'
-                    }`}
-                  >{f.label}</button>
-                ))}
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+                <label className="text-xs text-blue-300/70 mb-1 block">Due on day of month *</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={form.dueDay}
+                    onChange={e => setForm(f => ({ ...f, dueDay: e.target.value }))}
+                    placeholder="e.g., 1 or 15"
+                    className="w-24 px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-blue-500/50"
+                  />
+                  <span className="text-xs text-white/40">Auto-generates when due each {form.recurringFrequency === 'annually' ? 'year' : form.recurringFrequency === 'quarterly' ? 'quarter' : 'month'}</span>
+                </div>
               </div>
             )}
           </div>
@@ -444,10 +472,10 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
           ) : <div />}
           <button
             onClick={handleSave}
-            disabled={isMileage ? (!form.miles || parseFloat(form.miles) <= 0) : !form.description.trim()}
+            disabled={isMileage ? (!form.miles || parseFloat(form.miles) <= 0) : (!form.description.trim() || (form.recurring && (!form.dueDay || parseInt(form.dueDay) < 1 || parseInt(form.dueDay) > 31)))}
             className="px-6 py-2 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isEditing ? 'Update' : isMileage ? 'Log Trip' : 'Record Expense'}
+            {isEditing ? 'Update' : form.recurring ? 'Save Recurring Bill' : isMileage ? 'Log Trip' : 'Record Expense'}
           </button>
         </div>
       </div>
