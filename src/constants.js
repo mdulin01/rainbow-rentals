@@ -78,6 +78,14 @@ export const recurringFrequencies = [
   { value: 'annually', label: 'Annually' },
 ];
 
+// Capital item condition ratings
+export const capitalConditions = [
+  { value: 'good', label: 'Good', color: 'text-green-400', bg: 'bg-green-500/20', border: 'border-green-500/30' },
+  { value: 'fair', label: 'Fair', color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500/30' },
+  { value: 'poor', label: 'Poor', color: 'text-orange-400', bg: 'bg-orange-500/20', border: 'border-orange-500/30' },
+  { value: 'critical', label: 'Critical', color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/30' },
+];
+
 // IRS standard mileage rate (2025/2026)
 export const MILEAGE_RATE = 0.70;
 

@@ -28,6 +28,7 @@ import IdeaCard from './components/SharedHub/IdeaCard';
 import PropertyCard from './components/Rentals/PropertyCard';
 import NewPropertyModal from './components/Rentals/NewPropertyModal';
 import PropertyDetail from './components/Rentals/PropertyDetail';
+import PropertyFinancialBreakdownModal from './components/Rentals/PropertyFinancialBreakdownModal';
 import TenantModal from './components/Rentals/TenantModal';
 
 // Tenants components
@@ -188,6 +189,9 @@ export default function RainbowRentals() {
     showAddExpenseModal, setShowAddExpenseModal,
     addExpense, updateExpense, deleteExpense,
   } = expensesHook;
+
+  // Property financial breakdown modal
+  const [showPropertyBreakdown, setShowPropertyBreakdown] = useState(false);
 
   // Document viewer
   const [viewingDocument, setViewingDocument] = useState(null);
@@ -782,7 +786,7 @@ export default function RainbowRentals() {
                           <p className="text-2xl font-bold text-emerald-400">{formatCurrency(monthRentCollected)}</p>
                           <p className="text-xs text-white/40">of {formatCurrency(totalMonthlyRent)}</p>
                         </button>
-                        <button onClick={() => setActiveSection('expenses')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
+                        <button onClick={() => setShowPropertyBreakdown(true)} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
                           <p className="text-white/40 text-xs mb-1">YTD Profit / Loss</p>
                           <p className={`text-2xl font-bold ${ytdProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(ytdProfit)}</p>
                         </button>
@@ -949,6 +953,8 @@ export default function RainbowRentals() {
                       uploadingPhoto={uploadingPropertyPhoto === selectedProperty.id}
                       tasks={sharedTasks.filter(t => t.linkedTo?.propertyId === String(selectedProperty.id))}
                       showToast={showToast}
+                      expenses={expenses}
+                      rentPayments={rentPayments}
                       onUpdateProperty={(propId, updates) => {
                         updateProperty(propId, updates);
                         setSelectedProperty(prev => ({ ...prev, ...updates }));
@@ -986,6 +992,7 @@ export default function RainbowRentals() {
                               key={property.id}
                               property={property}
                               documents={documents}
+                              expenses={expenses}
                               onViewDetails={() => setSelectedProperty(property)}
                               onEdit={() => setShowNewPropertyModal(property)}
                               onDelete={() => {
@@ -1589,6 +1596,21 @@ export default function RainbowRentals() {
               });
             }}
             onClose={() => setShowAddExpenseModal(null)}
+          />
+        )}
+
+        {/* Property Financial Breakdown Modal */}
+        {showPropertyBreakdown && (
+          <PropertyFinancialBreakdownModal
+            properties={properties}
+            rentPayments={rentPayments}
+            expenses={expenses}
+            onPropertyClick={(prop) => {
+              setShowPropertyBreakdown(false);
+              setActiveSection('rentals');
+              setSelectedProperty(prop);
+            }}
+            onClose={() => setShowPropertyBreakdown(false)}
           />
         )}
 

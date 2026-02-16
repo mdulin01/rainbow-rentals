@@ -1,12 +1,24 @@
 import React, { useState } from 'react';
-import { MoreVertical, MapPin, User, DollarSign, Trash2, Edit3, Eye, FileText, Clock, Users } from 'lucide-react';
+import { MoreVertical, MapPin, User, DollarSign, Trash2, Edit3, Eye, FileText, Clock, Users, TrendingUp, TrendingDown } from 'lucide-react';
 import { propertyStatuses } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
-const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [], onViewDocument }) => {
+const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [], onViewDocument, expenses = [] }) => {
   const [showMenu, setShowMenu] = useState(false);
 
   const tenants = getPropertyTenants(property);
+
+  // Net income calculation
+  const currentYear = new Date().getFullYear();
+  const propId = String(property.id);
+  const monthsElapsed = Math.max(1, new Date().getMonth() + 1);
+  const ytdExpenses = (expenses || [])
+    .filter(e => String(e.propertyId) === propId && e.isTemplate !== true)
+    .filter(e => e.date && e.date.startsWith(String(currentYear)))
+    .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  const avgMonthlyExpenses = ytdExpenses / monthsElapsed;
+  const monthlyRent = parseFloat(property.monthlyRent) || 0;
+  const monthlyNet = monthlyRent - avgMonthlyExpenses;
 
   // Find lease document for this property
   const leaseDoc = documents.find(
@@ -144,9 +156,17 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
                 <FileText className="w-3.5 h-3.5" />
               </button>
             )}
-            <div className="flex items-center gap-0.5 text-emerald-400 font-semibold">
-              <DollarSign className="w-3 h-3" />
-              <span>{property.monthlyRent ? parseFloat(property.monthlyRent).toLocaleString() : '0'}/mo</span>
+            <div className="flex items-center gap-1.5">
+              {avgMonthlyExpenses > 0 && (
+                <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${monthlyNet >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                  {monthlyNet >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                  ${Math.abs(Math.round(monthlyNet)).toLocaleString()}
+                </span>
+              )}
+              <div className="flex items-center gap-0.5 text-emerald-400 font-semibold">
+                <DollarSign className="w-3 h-3" />
+                <span>{property.monthlyRent ? parseFloat(property.monthlyRent).toLocaleString() : '0'}/mo</span>
+              </div>
             </div>
           </div>
         </div>
