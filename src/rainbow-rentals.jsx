@@ -125,7 +125,6 @@ export default function RainbowRentals() {
   const saveDocumentsRef = useRef(() => {});
   const saveFinancialsRef = useRef(() => {});
   const saveRentRef = useRef(() => {});
-  const saveExpensesRef = useRef(() => {});
   const expensesSaveIdRef = useRef(null); // Track our own saves to avoid onSnapshot overwrite
 
   // ========== HOOKS ==========
@@ -182,8 +181,8 @@ export default function RainbowRentals() {
     addRentPayment, updateRentPayment, deleteRentPayment,
   } = rentHook;
 
-  // Pass the ref OBJECT (not .current) so the hook always calls the latest save function
-  const expensesHook = useExpenses(currentUser, saveExpensesRef, showToast);
+  // Pass db directly — hook saves to Firestore internally, no ref indirection
+  const expensesHook = useExpenses(db, currentUser, showToast);
   const {
     expenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
@@ -318,35 +317,8 @@ export default function RainbowRentals() {
 
   useEffect(() => { saveRentRef.current = saveRentToFirestore; }, [saveRentToFirestore]);
 
-  const saveExpensesToFirestore = useCallback(async (newExpenses) => {
-    if (!user) {
-      console.error('[expenses] Save called but no user! Expenses will NOT be persisted.');
-      return;
-    }
-    // SAFETY: Never overwrite Firestore with an empty array
-    if (!newExpenses || newExpenses.length === 0) {
-      console.error('[expenses] Save called with EMPTY array! Aborting to prevent data loss.');
-      return;
-    }
-    const saveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    expensesSaveIdRef.current = saveId;
-    console.log('[expenses] Saving', newExpenses.length, 'expenses to Firestore (saveId:', saveId, ')');
-    try {
-      await setDoc(doc(db, 'rentalData', 'expenses'), {
-        expenses: newExpenses,
-        lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser,
-        saveId: saveId,
-      }, { merge: true });
-      console.log('[expenses] Save successful');
-    } catch (error) {
-      console.error('[expenses] Save FAILED:', error);
-      showToast('Failed to save expense data.', 'error');
-    }
-  }, [user, currentUser, showToast]);
-
-  // Set the ref immediately during render (not in an effect) so it's available ASAP
-  saveExpensesRef.current = saveExpensesToFirestore;
+  // NOTE: Expense saving is now handled directly inside the useExpenses hook.
+  // No more saveExpensesRef indirection — the hook calls setDoc internally.
 
   // ========== FIRESTORE LOAD (onSnapshot) ==========
   useEffect(() => {
@@ -420,24 +392,30 @@ export default function RainbowRentals() {
       (error) => console.error('Error loading rent data:', error)
     );
 
-    // Subscribe to expenses — skip snapshots triggered by our own saves
+    // Subscribe to expenses
     const expensesUnsubscribe = onSnapshot(
       doc(db, 'rentalData', 'expenses'),
       (docSnap) => {
+        console.log('[expenses] onSnapshot fired, exists:', docSnap.exists());
         if (docSnap.exists()) {
           const data = docSnap.data();
+          console.log('[expenses] onSnapshot data: saveId=', data.saveId, 'expenses count=', data.expenses?.length || 0);
           // If this snapshot was triggered by our own save, skip to avoid overwriting local state
           if (data.saveId && data.saveId === expensesSaveIdRef.current) {
             console.log('[expenses] Skipping onSnapshot from our own save');
             return;
           }
-          if (data.expenses) {
-            console.log('[expenses] onSnapshot loading', data.expenses.length, 'expenses from Firestore');
+          if (data.expenses && data.expenses.length > 0) {
+            console.log('[expenses] onSnapshot: applying', data.expenses.length, 'expenses to state');
             setExpenses(data.expenses);
+          } else {
+            console.warn('[expenses] onSnapshot: document exists but expenses is empty/missing');
           }
+        } else {
+          console.warn('[expenses] onSnapshot: document does NOT exist in Firestore!');
         }
       },
-      (error) => console.error('Error loading expenses:', error)
+      (error) => console.error('[expenses] onSnapshot ERROR:', error)
     );
 
     return () => {

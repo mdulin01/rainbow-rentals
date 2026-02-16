@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { doc, setDoc } from 'firebase/firestore';
 
 /**
  * Get the last day of a given month.
@@ -50,40 +51,32 @@ export function autoCreateRecurringExpenses(expenses) {
 
   const now = new Date();
   const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1; // 1-indexed
+  const currentMonth = now.getMonth() + 1;
 
   const newExpenses = [];
 
   templates.forEach(template => {
     const dueDay = template.dueDay || 1;
     const frequency = template.recurringFrequency || 'monthly';
-    // Use the earlier of createdAt or the user-specified date to determine start month.
-    // This ensures that if a user creates a template in Feb but sets date to Jan,
-    // January still gets generated.
     const createdDate = template.createdAt ? new Date(template.createdAt) : now;
     const templateDate = template.date ? new Date(template.date + 'T00:00:00') : createdDate;
     const effectiveStart = templateDate < createdDate ? templateDate : createdDate;
     const startMonth = effectiveStart.getMonth() + 1;
 
-    // Check current month and 2 prior months
     for (let offset = 0; offset < 3; offset++) {
       const { year: tYear, month: tMonth } = subtractMonths(currentYear, currentMonth, offset);
       const monthStr = toMonthStr(tYear, tMonth);
 
-      // Skip if this month doesn't match the frequency schedule
       if (!monthMatchesFrequency(tYear, tMonth, frequency, startMonth)) continue;
 
-      // Skip if instance already exists for this template + month
       const exists = expenses.some(e =>
         e.generatedFromTemplate === template.id && e.generatedForMonth === monthStr
       );
       if (exists) continue;
 
-      // Don't generate for months before the effective start date
       const effectiveStartMonth = toMonthStr(effectiveStart.getFullYear(), effectiveStart.getMonth() + 1);
       if (monthStr < effectiveStartMonth) continue;
 
-      // Calculate actual due date, capping dueDay to last day of month
       const maxDay = daysInMonth(tYear, tMonth);
       const actualDay = Math.min(dueDay, maxDay);
       const dateStr = `${tYear}-${String(tMonth).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
@@ -113,14 +106,43 @@ export function autoCreateRecurringExpenses(expenses) {
 }
 
 /**
+ * Directly save expenses to Firestore. No refs, no indirection.
+ * Returns true on success, false on failure.
+ */
+async function saveExpensesDirect(db, expenses, currentUser) {
+  if (!db) {
+    console.error('[expenses] saveExpensesDirect: no db instance!');
+    return false;
+  }
+  if (!expenses || expenses.length === 0) {
+    console.error('[expenses] saveExpensesDirect: refusing to save empty array');
+    return false;
+  }
+  const saveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  console.log('[expenses] saveExpensesDirect: saving', expenses.length, 'expenses, saveId:', saveId);
+  try {
+    await setDoc(doc(db, 'rentalData', 'expenses'), {
+      expenses: expenses,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser || 'unknown',
+      saveId: saveId,
+    }, { merge: true });
+    console.log('[expenses] saveExpensesDirect: SUCCESS');
+    return true;
+  } catch (error) {
+    console.error('[expenses] saveExpensesDirect: FAILED', error);
+    return false;
+  }
+}
+
+/**
  * useExpenses Hook
  * Manages expense data and operations.
  *
- * IMPORTANT: saveRef must be a React ref object (not .current) so that
- * the hook always calls the latest save function. This prevents the bug
- * where the initial no-op save function gets captured in a closure.
+ * db and currentUser are passed directly so saves go straight to Firestore
+ * with zero ref indirection.
  */
-export const useExpenses = (currentUser, saveRef, showToast) => {
+export const useExpenses = (db, currentUser, showToast) => {
   const [expenses, setExpenses] = useState([]);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(null);
 
@@ -130,31 +152,35 @@ export const useExpenses = (currentUser, saveRef, showToast) => {
       id: expense.id || Date.now().toString(),
       createdAt: expense.createdAt || new Date().toISOString(),
     };
+    console.log('[expenses] addExpense called:', newExpense.description || newExpense.category);
     setExpenses(prev => {
       const updated = [...prev, newExpense];
-      if (saveRef.current) saveRef.current(updated);
+      console.log('[expenses] addExpense: saving', updated.length, 'total expenses');
+      saveExpensesDirect(db, updated, currentUser);
       return updated;
     });
     showToast('Expense recorded', 'success');
-  }, [showToast, saveRef]);
+  }, [db, currentUser, showToast]);
 
   const updateExpense = useCallback((expenseId, updates) => {
     setExpenses(prev => {
       const updated = prev.map(e => e.id === expenseId ? { ...e, ...updates } : e);
-      if (saveRef.current) saveRef.current(updated);
+      saveExpensesDirect(db, updated, currentUser);
       return updated;
     });
     showToast('Expense updated', 'success');
-  }, [showToast, saveRef]);
+  }, [db, currentUser, showToast]);
 
   const deleteExpense = useCallback((expenseId) => {
     setExpenses(prev => {
       const updated = prev.filter(e => e.id !== expenseId);
-      if (saveRef.current) saveRef.current(updated);
+      if (updated.length > 0) {
+        saveExpensesDirect(db, updated, currentUser);
+      }
       return updated;
     });
     showToast('Expense deleted', 'info');
-  }, [showToast, saveRef]);
+  }, [db, currentUser, showToast]);
 
   return {
     expenses,
