@@ -182,7 +182,8 @@ export default function RainbowRentals() {
     addRentPayment, updateRentPayment, deleteRentPayment,
   } = rentHook;
 
-  const expensesHook = useExpenses(currentUser, saveExpensesRef.current, showToast);
+  // Pass the ref OBJECT (not .current) so the hook always calls the latest save function
+  const expensesHook = useExpenses(currentUser, saveExpensesRef, showToast);
   const {
     expenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
@@ -318,9 +319,13 @@ export default function RainbowRentals() {
   useEffect(() => { saveRentRef.current = saveRentToFirestore; }, [saveRentToFirestore]);
 
   const saveExpensesToFirestore = useCallback(async (newExpenses) => {
-    if (!user) return;
+    if (!user) {
+      console.error('[expenses] Save called but no user! Expenses will NOT be persisted.');
+      return;
+    }
     const saveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     expensesSaveIdRef.current = saveId;
+    console.log('[expenses] Saving', newExpenses.length, 'expenses to Firestore (saveId:', saveId, ')');
     try {
       await setDoc(doc(db, 'rentalData', 'expenses'), {
         expenses: newExpenses,
@@ -328,13 +333,15 @@ export default function RainbowRentals() {
         updatedBy: currentUser,
         saveId: saveId,
       }, { merge: true });
+      console.log('[expenses] Save successful');
     } catch (error) {
-      console.error('Error saving expenses:', error);
+      console.error('[expenses] Save FAILED:', error);
       showToast('Failed to save expense data.', 'error');
     }
   }, [user, currentUser, showToast]);
 
-  useEffect(() => { saveExpensesRef.current = saveExpensesToFirestore; }, [saveExpensesToFirestore]);
+  // Set the ref immediately during render (not in an effect) so it's available ASAP
+  saveExpensesRef.current = saveExpensesToFirestore;
 
   // ========== FIRESTORE LOAD (onSnapshot) ==========
   useEffect(() => {
@@ -416,9 +423,13 @@ export default function RainbowRentals() {
           const data = docSnap.data();
           // If this snapshot was triggered by our own save, skip to avoid overwriting local state
           if (data.saveId && data.saveId === expensesSaveIdRef.current) {
+            console.log('[expenses] Skipping onSnapshot from our own save');
             return;
           }
-          if (data.expenses) setExpenses(data.expenses);
+          if (data.expenses) {
+            console.log('[expenses] onSnapshot loading', data.expenses.length, 'expenses from Firestore');
+            setExpenses(data.expenses);
+          }
         }
       },
       (error) => console.error('Error loading expenses:', error)
@@ -438,15 +449,17 @@ export default function RainbowRentals() {
   const autoCreateDoneRef = useRef(false);
   useEffect(() => {
     if (!user || expenses.length === 0 || autoCreateDoneRef.current) return;
-    // Delay slightly to let Firestore snapshot fully settle
+    // Delay to let Firestore snapshot fully settle
     const timer = setTimeout(() => {
       if (autoCreateDoneRef.current) return;
       autoCreateDoneRef.current = true;
       // Use functional update to avoid stale closure
       setExpenses(prev => {
+        console.log('[expenses] Auto-creation running with', prev.length, 'existing expenses');
         const newExpenses = autoCreateRecurringExpenses(prev);
         if (newExpenses.length > 0) {
           const updated = [...prev, ...newExpenses];
+          console.log('[expenses] Auto-created', newExpenses.length, 'new expenses, total now:', updated.length);
           saveExpensesRef.current(updated);
           showToast(`Auto-created ${newExpenses.length} recurring expense(s)`, 'success');
           return updated;

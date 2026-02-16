@@ -61,6 +61,7 @@ export const expenseCategories = [
   { value: 'software', label: 'Software', emoji: '💻' },
   { value: 'taxes', label: 'Property Taxes', emoji: '📊' },
   { value: 'landscaping', label: 'Landscaping', emoji: '🌿' },
+  { value: 'hoa', label: 'HOA', emoji: '🏘️' },
   { value: 'legal', label: 'Legal Fees', emoji: '⚖️' },
   { value: 'mileage', label: 'Mileage', emoji: '🚗' },
   { value: 'other', label: 'Other', emoji: '📋' },

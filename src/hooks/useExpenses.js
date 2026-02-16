@@ -26,9 +26,6 @@ function subtractMonths(year, month, n) {
 
 /**
  * Check if a given month matches the recurring frequency schedule.
- * For monthly: every month qualifies.
- * For quarterly: months that are 0, 3, 6, 9 months from the template's start month.
- * For annually: only the same month as the template's start month.
  */
 function monthMatchesFrequency(targetYear, targetMonth, frequency, startMonth) {
   if (frequency === 'monthly') return true;
@@ -117,13 +114,13 @@ export function autoCreateRecurringExpenses(expenses) {
 
 /**
  * useExpenses Hook
- * Manages expense data and operations
- * All CRUD uses functional state updates (prev =>) to avoid stale closure bugs.
+ * Manages expense data and operations.
+ *
+ * IMPORTANT: saveRef must be a React ref object (not .current) so that
+ * the hook always calls the latest save function. This prevents the bug
+ * where the initial no-op save function gets captured in a closure.
  */
-export const useExpenses = (currentUser, saveExpenses, showToast) => {
-  const saveRef = useRef(saveExpenses);
-  saveRef.current = saveExpenses;
-
+export const useExpenses = (currentUser, saveRef, showToast) => {
   const [expenses, setExpenses] = useState([]);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(null);
 
@@ -135,29 +132,29 @@ export const useExpenses = (currentUser, saveExpenses, showToast) => {
     };
     setExpenses(prev => {
       const updated = [...prev, newExpense];
-      saveRef.current(updated);
+      if (saveRef.current) saveRef.current(updated);
       return updated;
     });
     showToast('Expense recorded', 'success');
-  }, [showToast]);
+  }, [showToast, saveRef]);
 
   const updateExpense = useCallback((expenseId, updates) => {
     setExpenses(prev => {
       const updated = prev.map(e => e.id === expenseId ? { ...e, ...updates } : e);
-      saveRef.current(updated);
+      if (saveRef.current) saveRef.current(updated);
       return updated;
     });
     showToast('Expense updated', 'success');
-  }, [showToast]);
+  }, [showToast, saveRef]);
 
   const deleteExpense = useCallback((expenseId) => {
     setExpenses(prev => {
       const updated = prev.filter(e => e.id !== expenseId);
-      saveRef.current(updated);
+      if (saveRef.current) saveRef.current(updated);
       return updated;
     });
     showToast('Expense deleted', 'info');
-  }, [showToast]);
+  }, [showToast, saveRef]);
 
   return {
     expenses,
