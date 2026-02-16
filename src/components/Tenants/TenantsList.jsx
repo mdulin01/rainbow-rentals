@@ -143,7 +143,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
           <p className="text-white/40 text-xs mb-1">Monthly Rent</p>
-          <p className="text-xl font-bold text-emerald-400">{formatCurrency(allTenants.reduce((sum, t) => sum + (t.monthlyRent || 0), 0))}</p>
+          <p className="text-xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0))}</p>
         </div>
       </div>
 
