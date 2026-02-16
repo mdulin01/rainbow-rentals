@@ -10,7 +10,7 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDelete, showToast }) {
+export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDelete, onGenerateFromTemplate, showToast }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [propertyFilter, setPropertyFilter] = useState('all');
@@ -79,16 +79,55 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
     );
   };
 
-  // Summary stats (regular expenses only)
-  const totalExpenses = regularExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const currentYear = new Date().getFullYear().toString();
-  const ytdExpenses = regularExpenses
-    .filter(e => (e.date || '').startsWith(currentYear))
+  // Helper: count how many times a recurring template should have fired between its creation and a target date
+  const getRecurringOccurrences = (template, startDate, endDate) => {
+    const freq = template.recurringFrequency || 'monthly';
+    const created = template.createdAt ? new Date(template.createdAt) : new Date(template.date || Date.now());
+    const start = new Date(Math.max(created.getTime(), startDate.getTime()));
+    if (start > endDate) return 0;
+    const startY = start.getFullYear(), startM = start.getMonth();
+    const endY = endDate.getFullYear(), endM = endDate.getMonth();
+    const totalMonths = (endY - startY) * 12 + (endM - startM) + 1;
+    if (freq === 'monthly') return totalMonths;
+    if (freq === 'quarterly') return Math.ceil(totalMonths / 3);
+    if (freq === 'annually') return Math.ceil(totalMonths / 12);
+    return totalMonths;
+  };
+
+  // Summary stats: regular expenses + recurring template expected amounts
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentYearStr = currentYear.toString();
+  const currentMonth = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const yearStart = new Date(currentYear, 0, 1);
+
+  const recordedTotal = regularExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const recordedYtd = regularExpenses
+    .filter(e => (e.date || '').startsWith(currentYearStr))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
-  const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-  const monthExpenses = regularExpenses
+  const recordedMonth = regularExpenses
     .filter(e => (e.date || '').startsWith(currentMonth))
     .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Calculate recurring template contributions (only for months without a generated instance)
+  const recurringThisMonth = templates.reduce((sum, t) => {
+    const hasInstance = regularExpenses.some(e => e.generatedFromTemplate === t.id && e.generatedForMonth === currentMonth);
+    if (hasInstance) return sum; // already counted in recorded
+    return sum + (t.amount || 0);
+  }, 0);
+
+  const recurringYtd = templates.reduce((sum, t) => {
+    const occurrences = getRecurringOccurrences(t, yearStart, now);
+    const generatedCount = regularExpenses.filter(e =>
+      e.generatedFromTemplate === t.id && (e.date || '').startsWith(currentYearStr)
+    ).length;
+    const missingCount = Math.max(0, occurrences - generatedCount);
+    return sum + missingCount * (t.amount || 0);
+  }, 0);
+
+  const totalExpenses = recordedTotal + recurringYtd; // use YTD recurring as approximation for "all time with templates"
+  const ytdExpenses = recordedYtd + recurringYtd;
+  const monthExpenses = recordedMonth + recurringThisMonth;
 
   // Monthly recurring total
   const monthlyRecurringTotal = templates.reduce((sum, t) => {
@@ -97,6 +136,10 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
     if (t.recurringFrequency === 'annually') return sum + amt / 12;
     return sum + amt;
   }, 0);
+
+  // Check which templates have a generated instance for the current month
+  const templateHasCurrentMonth = (templateId) =>
+    regularExpenses.some(e => e.generatedFromTemplate === templateId && e.generatedForMonth === currentMonth);
 
   return (
     <div>
@@ -146,27 +189,50 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
             {templates.map(t => {
               const cat = expenseCategories.find(c => c.value === t.category);
               const freq = recurringFrequencies.find(f => f.value === t.recurringFrequency);
+              const hasThisMonth = templateHasCurrentMonth(t.id);
               return (
                 <div
                   key={t.id}
                   className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 hover:bg-blue-500/10 transition group"
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm">{cat?.emoji || '📋'}</span>
-                        <span className="text-sm font-medium text-white truncate">{t.description || cat?.label || 'Untitled'}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-semibold text-red-400">{formatCurrency(t.amount || 0)}</span>
-                        <span className="px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300">{freq?.label || 'Monthly'}</span>
-                        <span className="flex items-center gap-1 text-white/40">
-                          <Calendar className="w-3 h-3" />
-                          {ordinal(t.dueDay || 1)}
-                        </span>
-                        {t.propertyName && (
-                          <span className="text-white/40 truncate max-w-[120px]">{t.propertyName}</span>
-                        )}
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!hasThisMonth && onGenerateFromTemplate) {
+                            onGenerateFromTemplate(t);
+                          }
+                        }}
+                        disabled={hasThisMonth}
+                        className={`mt-0.5 p-1.5 rounded-lg transition flex-shrink-0 ${
+                          hasThisMonth
+                            ? 'text-emerald-400/50 cursor-default'
+                            : 'text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 cursor-pointer'
+                        }`}
+                        title={hasThisMonth ? 'Already added this month' : 'Add to this month\'s expenses'}
+                      >
+                        {hasThisMonth
+                          ? <span className="text-sm">✅</span>
+                          : <RefreshCw className="w-4 h-4" />
+                        }
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm">{cat?.emoji || '📋'}</span>
+                          <span className="text-sm font-medium text-white truncate">{t.description || cat?.label || 'Untitled'}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-red-400">{formatCurrency(t.amount || 0)}</span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300">{freq?.label || 'Monthly'}</span>
+                          <span className="flex items-center gap-1 text-white/40">
+                            <Calendar className="w-3 h-3" />
+                            {ordinal(t.dueDay || 1)}
+                          </span>
+                          {t.propertyName && (
+                            <span className="text-white/40 truncate max-w-[120px]">{t.propertyName}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition ml-2">

@@ -1085,6 +1085,32 @@ export default function RainbowRentals() {
                       onConfirm: () => { deleteExpense(expenseId); setConfirmDialog(null); },
                     });
                   }}
+                  onGenerateFromTemplate={(template) => {
+                    const now = new Date();
+                    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    const dueDay = template.dueDay || 1;
+                    const maxDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                    const actualDay = Math.min(dueDay, maxDay);
+                    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
+                    addExpense({
+                      id: `${Date.now()}-${template.id}-${monthStr}`,
+                      createdAt: new Date().toISOString(),
+                      createdBy: currentUser,
+                      propertyId: template.propertyId || '',
+                      propertyName: template.propertyName || '',
+                      category: template.category || 'other',
+                      description: template.description || '',
+                      amount: template.amount || 0,
+                      date: dateStr,
+                      vendor: template.vendor || '',
+                      notes: template.notes || '',
+                      receiptPhoto: '',
+                      recurring: false,
+                      isTemplate: false,
+                      generatedFromTemplate: template.id,
+                      generatedForMonth: monthStr,
+                    });
+                  }}
                   showToast={showToast}
                 />
               )}
