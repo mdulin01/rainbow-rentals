@@ -126,6 +126,7 @@ export default function RainbowRentals() {
   const saveFinancialsRef = useRef(() => {});
   const saveRentRef = useRef(() => {});
   const saveExpensesRef = useRef(() => {});
+  const expensesSaveIdRef = useRef(null); // Track our own saves to avoid onSnapshot overwrite
 
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
@@ -318,11 +319,14 @@ export default function RainbowRentals() {
 
   const saveExpensesToFirestore = useCallback(async (newExpenses) => {
     if (!user) return;
+    const saveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    expensesSaveIdRef.current = saveId;
     try {
       await setDoc(doc(db, 'rentalData', 'expenses'), {
         expenses: newExpenses,
         lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser
+        updatedBy: currentUser,
+        saveId: saveId,
       }, { merge: true });
     } catch (error) {
       console.error('Error saving expenses:', error);
@@ -404,12 +408,16 @@ export default function RainbowRentals() {
       (error) => console.error('Error loading rent data:', error)
     );
 
-    // Subscribe to expenses
+    // Subscribe to expenses — skip snapshots triggered by our own saves
     const expensesUnsubscribe = onSnapshot(
       doc(db, 'rentalData', 'expenses'),
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+          // If this snapshot was triggered by our own save, skip to avoid overwriting local state
+          if (data.saveId && data.saveId === expensesSaveIdRef.current) {
+            return;
+          }
           if (data.expenses) setExpenses(data.expenses);
         }
       },

@@ -60,9 +60,13 @@ export function autoCreateRecurringExpenses(expenses) {
   templates.forEach(template => {
     const dueDay = template.dueDay || 1;
     const frequency = template.recurringFrequency || 'monthly';
-    // Determine start month for quarterly/annually — use the month the template was created
+    // Use the earlier of createdAt or the user-specified date to determine start month.
+    // This ensures that if a user creates a template in Feb but sets date to Jan,
+    // January still gets generated.
     const createdDate = template.createdAt ? new Date(template.createdAt) : now;
-    const startMonth = createdDate.getMonth() + 1;
+    const templateDate = template.date ? new Date(template.date + 'T00:00:00') : createdDate;
+    const effectiveStart = templateDate < createdDate ? templateDate : createdDate;
+    const startMonth = effectiveStart.getMonth() + 1;
 
     // Check current month and 2 prior months
     for (let offset = 0; offset < 3; offset++) {
@@ -78,9 +82,9 @@ export function autoCreateRecurringExpenses(expenses) {
       );
       if (exists) continue;
 
-      // Don't generate for months before the template was created
-      const templateCreatedMonth = toMonthStr(createdDate.getFullYear(), createdDate.getMonth() + 1);
-      if (monthStr < templateCreatedMonth) continue;
+      // Don't generate for months before the effective start date
+      const effectiveStartMonth = toMonthStr(effectiveStart.getFullYear(), effectiveStart.getMonth() + 1);
+      if (monthStr < effectiveStartMonth) continue;
 
       // Calculate actual due date, capping dueDay to last day of month
       const maxDay = daysInMonth(tYear, tMonth);
