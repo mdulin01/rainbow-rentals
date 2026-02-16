@@ -614,6 +614,18 @@ export default function RainbowRentals() {
     showNewPropertyModal || showTenantModal || showAddDocumentModal || showAddTransactionModal ||
     showAddRentModal || showAddExpenseModal || viewingDocument || selectedProperty;
 
+  // Mobile section dropdown
+  const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
+  const allSections = [
+    { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
+    { id: 'rentals', label: 'Properties', emoji: '🏠' },
+    { id: 'tenants', label: 'Tenants', emoji: '👤' },
+    { id: 'rent', label: 'Rent', emoji: '💰' },
+    { id: 'expenses', label: 'Expenses', emoji: '💸' },
+    { id: 'documents', label: 'Documents', emoji: '📄' },
+  ];
+  const activeSectionInfo = allSections.find(s => s.id === activeSection) || allSections[0];
+
   // Filter tasks for Hub dashboard
   const pendingTasks = sharedTasks.filter(t => t.status !== 'done');
   const todayTasks = pendingTasks.filter(isTaskDueToday);
@@ -657,12 +669,51 @@ export default function RainbowRentals() {
         <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-gradient-to-br from-red-500 via-green-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-sm font-bold text-white">RR</span>
+              {/* Mobile: section name with dropdown */}
+              <div className="md:hidden relative">
+                <button
+                  onClick={() => setShowMobileSectionDropdown(!showMobileSectionDropdown)}
+                  className="flex items-center gap-2 px-1 py-1 rounded-lg transition active:scale-95"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-red-500 via-green-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg">
+                    <span className="text-xs font-bold text-white">RR</span>
+                  </div>
+                  <span className="text-lg font-bold text-white">{activeSectionInfo.emoji} {activeSectionInfo.label}</span>
+                  <ChevronDown className={`w-4 h-4 text-white/50 transition-transform ${showMobileSectionDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showMobileSectionDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowMobileSectionDropdown(false)} />
+                    <div className="absolute top-full left-0 mt-2 z-50 bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl min-w-[180px] py-1"
+                      style={{ animation: 'dropdownIn 0.15s ease-out both' }}>
+                      {allSections.map(section => (
+                        <button
+                          key={section.id}
+                          onClick={() => {
+                            setActiveSection(section.id);
+                            if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
+                            setShowMobileSectionDropdown(false);
+                            setShowAddNewMenu(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition ${
+                            activeSection === section.id ? 'bg-white/10 text-white font-semibold' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <span className="text-base">{section.emoji}</span>
+                          <span>{section.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <style>{`@keyframes dropdownIn { from { opacity: 0; transform: translateY(-8px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
+                  </>
+                )}
               </div>
-              <div>
+              {/* Desktop: logo + title */}
+              <div className="hidden md:flex items-center gap-3">
+                <div className="w-9 h-9 bg-gradient-to-br from-red-500 via-green-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-sm font-bold text-white">RR</span>
+                </div>
                 <h1 className="text-lg font-bold text-white leading-tight">Rainbow Reality</h1>
-                <p className="text-[10px] text-white/40 leading-tight md:hidden">{currentUser}'s Dashboard</p>
               </div>
               {/* Desktop nav tabs */}
               <nav className="hidden md:flex items-center gap-1 ml-6">
@@ -1683,8 +1734,8 @@ export default function RainbowRentals() {
             {showAddNewMenu && isOwner && (
               <>
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99]" onClick={() => setShowAddNewMenu(false)} />
-                <div className="absolute bottom-full left-1/2 mb-[68px] z-[101] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
-                  style={{ animation: 'fabGridUp 0.2s cubic-bezier(0.16,1,0.3,1) both', transformOrigin: 'bottom center' }}>
+                <div className="fixed right-4 z-[101] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
+                  style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 132px)', animation: 'fabGridUp 0.2s cubic-bezier(0.16,1,0.3,1) both', transformOrigin: 'bottom right' }}>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
@@ -1715,55 +1766,56 @@ export default function RainbowRentals() {
 
             {/* Nav bar */}
             <div className="relative bg-slate-900 border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-              {/* FAB button */}
-              {isOwner && (
-                <button
-                  onClick={() => setShowAddNewMenu(!showAddNewMenu)}
-                  className={`absolute left-1/2 -translate-x-1/2 -top-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 z-[101] ${
-                    showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600'
-                  }`}
-                  style={{
-                    width: '3.5rem', height: '3.5rem',
-                    boxShadow: showAddNewMenu
-                      ? '0 4px 30px rgba(236,72,153,0.7), 0 0 0 4px rgba(236,72,153,0.12)'
-                      : '0 4px 30px rgba(139,92,246,0.7), 0 0 0 4px rgba(139,92,246,0.12)',
-                  }}>
-                  <Plus className="w-6 h-6 text-white transition-transform duration-200" />
-                </button>
-              )}
-
-              {/* Tab buttons */}
+              {/* Tab buttons — all 6 sections */}
               <div className="flex items-end justify-around px-1 pt-1 pb-1">
                 {[
                   { id: 'dashboard', label: 'Home', emoji: '📊', gradient: 'from-purple-500 to-violet-500' },
-                  { id: 'rentals', label: 'Rentals', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
+                  { id: 'rentals', label: 'Props', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
                   { id: 'tenants', label: 'Tenants', emoji: '👤', gradient: 'from-blue-400 to-indigo-500' },
                   { id: 'rent', label: 'Rent', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
-                ].map((section, idx) => (
-                  <React.Fragment key={section.id}>
-                    <button
-                      onClick={() => {
-                        setActiveSection(section.id);
-                        if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
-                        setShowAddNewMenu(false);
-                      }}
-                      className="relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all active:scale-95 min-w-[52px]"
-                    >
-                      <span className={`text-lg mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
-                        {section.emoji}
-                      </span>
-                      <span className={`text-[10px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
-                        {section.label}
-                      </span>
-                      {activeSection === section.id && (
-                        <div className={`absolute -bottom-0.5 w-6 h-0.5 rounded-full bg-gradient-to-r ${section.gradient}`} />
-                      )}
-                    </button>
-                    {idx === 1 && isOwner && <div className="w-16" />}
-                  </React.Fragment>
+                  { id: 'expenses', label: 'Costs', emoji: '💸', gradient: 'from-red-400 to-rose-500' },
+                  { id: 'documents', label: 'Docs', emoji: '📄', gradient: 'from-amber-400 to-orange-500' },
+                ].map((section) => (
+                  <button
+                    key={section.id}
+                    onClick={() => {
+                      setActiveSection(section.id);
+                      if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
+                      setShowAddNewMenu(false);
+                    }}
+                    className="relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all active:scale-95 min-w-[44px]"
+                  >
+                    <span className={`text-base mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
+                      {section.emoji}
+                    </span>
+                    <span className={`text-[9px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
+                      {section.label}
+                    </span>
+                    {activeSection === section.id && (
+                      <div className={`absolute -bottom-0.5 w-5 h-0.5 rounded-full bg-gradient-to-r ${section.gradient}`} />
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
+
+            {/* FAB — floating above bottom nav on right side */}
+            {isOwner && (
+              <button
+                onClick={() => setShowAddNewMenu(!showAddNewMenu)}
+                className={`fixed right-4 z-[101] rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 ${
+                  showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600'
+                }`}
+                style={{
+                  bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
+                  width: '3rem', height: '3rem',
+                  boxShadow: showAddNewMenu
+                    ? '0 4px 24px rgba(236,72,153,0.6)'
+                    : '0 4px 24px rgba(139,92,246,0.6)',
+                }}>
+                <Plus className="w-5 h-5 text-white transition-transform duration-200" />
+              </button>
+            )}
           </nav>
         )}
 
