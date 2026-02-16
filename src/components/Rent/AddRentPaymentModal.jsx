@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { rentStatuses } from '../../constants';
+import { getPropertyTenants } from '../../hooks/useProperties';
 
 export default function AddRentPaymentModal({ payment, properties, onSave, onDelete, onClose }) {
   const isEditing = payment && payment.id;
@@ -39,12 +40,15 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
   // Auto-fill tenant/property name when property selected
   const handlePropertyChange = (propertyId) => {
     const prop = properties.find(p => String(p.id) === String(propertyId));
+    const tenants = prop ? getPropertyTenants(prop) : [];
+    const tenantNames = tenants.map(t => t.name).filter(Boolean).join(', ');
+    const totalRent = tenants.reduce((sum, t) => sum + (parseFloat(t.monthlyRent) || 0), 0);
     setForm(f => ({
       ...f,
       propertyId,
       propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
-      tenantName: prop?.tenant?.name || '',
-      amount: f.amount || (prop?.tenant?.monthlyRent || prop?.monthlyRent || ''),
+      tenantName: tenantNames || '',
+      amount: f.amount || (totalRent || prop?.monthlyRent || ''),
     }));
   };
 

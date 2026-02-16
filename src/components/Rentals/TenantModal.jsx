@@ -143,20 +143,11 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
                 className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
               >
                 <option value="" className="bg-slate-800">Select a property...</option>
-                {properties.filter(p => !p.tenant?.name).map(p => (
+                {properties.map(p => (
                   <option key={p.id} value={String(p.id)} className="bg-slate-800">
                     {p.emoji || '🏠'} {p.name}
                   </option>
                 ))}
-                {properties.filter(p => p.tenant?.name).length > 0 && (
-                  <optgroup label="Already has tenant">
-                    {properties.filter(p => p.tenant?.name).map(p => (
-                      <option key={p.id} value={String(p.id)} className="bg-slate-800">
-                        {p.emoji || '🏠'} {p.name} (occupied)
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
               </select>
             </div>
           )}

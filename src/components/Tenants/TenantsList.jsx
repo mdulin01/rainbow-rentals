@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign } from 'lucide-react';
 import { tenantStatuses } from '../../constants';
 import { formatDate, formatCurrency, getDaysUntil } from '../../utils';
+import { getPropertyTenants } from '../../hooks/useProperties';
 
 export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -9,16 +10,20 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
   const [sortCol, setSortCol] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
 
-  // Flatten tenants from all properties
+  // Flatten tenants from all properties (supports multi-tenant)
   const allTenants = useMemo(() => {
-    return properties
-      .filter(p => p.tenant && p.tenant.name)
-      .map(p => ({
-        ...p.tenant,
-        propertyId: p.id,
-        propertyName: p.name,
-        propertyEmoji: p.emoji || '🏠',
-      }));
+    const result = [];
+    properties.forEach(p => {
+      getPropertyTenants(p).forEach(t => {
+        result.push({
+          ...t,
+          propertyId: p.id,
+          propertyName: p.name,
+          propertyEmoji: p.emoji || '🏠',
+        });
+      });
+    });
+    return result;
   }, [properties]);
 
   // Filter
@@ -184,7 +189,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                     <tr
                       key={`${tenant.propertyId}-${idx}`}
                       className="border-b border-white/[0.05] hover:bg-white/[0.03] transition cursor-pointer"
-                      onClick={() => onEditTenant(tenant.propertyId)}
+                      onClick={() => onEditTenant(tenant.propertyId, tenant)}
                     >
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium text-white">{tenant.name}</span>

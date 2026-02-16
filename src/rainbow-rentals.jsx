@@ -53,7 +53,7 @@ import FinancialSummary from './components/Financials/FinancialSummary';
 
 // Hooks
 import { useSharedHub } from './hooks/useSharedHub';
-import { useProperties } from './hooks/useProperties';
+import { useProperties, getPropertyTenants } from './hooks/useProperties';
 import { useDocuments } from './hooks/useDocuments';
 import { useFinancials } from './hooks/useFinancials';
 import { useRent } from './hooks/useRent';
@@ -150,7 +150,7 @@ export default function RainbowRentals() {
     propertyViewMode, setPropertyViewMode,
     showNewPropertyModal, setShowNewPropertyModal,
     showTenantModal, setShowTenantModal,
-    addProperty, updateProperty, deleteProperty, updateTenant, removeTenant,
+    addProperty, updateProperty, deleteProperty, addOrUpdateTenant, removeTenant,
   } = propertiesHook;
 
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
@@ -514,7 +514,7 @@ export default function RainbowRentals() {
       .forEach(l => results.push({ type: 'list', item: l, section: 'home' }));
     sharedIdeas.filter(i => i.title?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q))
       .forEach(i => results.push({ type: 'idea', item: i, section: 'home' }));
-    properties.filter(p => p.name?.toLowerCase().includes(q) || p.address?.street?.toLowerCase().includes(q) || p.tenant?.name?.toLowerCase().includes(q))
+    properties.filter(p => p.name?.toLowerCase().includes(q) || p.address?.street?.toLowerCase().includes(q) || getPropertyTenants(p).some(t => t.name?.toLowerCase().includes(q)))
       .forEach(p => results.push({ type: 'property', item: p, section: 'rentals' }));
     documents.filter(d => d.title?.toLowerCase().includes(q) || d.notes?.toLowerCase().includes(q))
       .forEach(d => results.push({ type: 'document', item: d, section: 'documents' }));
@@ -566,7 +566,7 @@ export default function RainbowRentals() {
   });
 
   // Filter properties by status - use propertyStatus if set, otherwise derive from tenant
-  const getEffectiveStatus = (p) => p.propertyStatus || (p.tenant?.name ? 'occupied' : 'vacant');
+  const getEffectiveStatus = (p) => p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant');
   const vacantProperties = properties.filter(p => getEffectiveStatus(p) === 'vacant');
   const activeProperties = properties.filter(p => getEffectiveStatus(p) === 'occupied');
   const leaseExpiredProperties = properties.filter(p => getEffectiveStatus(p) === 'lease-expired');
@@ -574,11 +574,16 @@ export default function RainbowRentals() {
 
   // Properties with expiring leases (within 60 days, not already expired)
   const expiringLeases = properties.filter(p => {
-    if (!p.tenant?.leaseEnd) return false;
-    const end = new Date(p.tenant.leaseEnd + 'T00:00:00');
-    const today = new Date(); today.setHours(0,0,0,0);
-    const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-    return days > 0 && days <= 60;
+    const tenants = getPropertyTenants(p);
+    if (tenants.length === 0) return false;
+    // Check if any tenant has a lease ending within 60 days
+    return tenants.some(t => {
+      if (!t.leaseEnd) return false;
+      const end = new Date(t.leaseEnd + 'T00:00:00');
+      const today = new Date(); today.setHours(0,0,0,0);
+      const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+      return days > 0 && days <= 60;
+    });
   });
 
   return (
@@ -697,8 +702,8 @@ export default function RainbowRentals() {
                     </button>
                     <button onClick={() => setActiveSection('tenants')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 text-left hover:bg-white/[0.08] transition cursor-pointer">
                       <p className="text-white/40 text-xs mb-1">Tenants</p>
-                      <p className="text-2xl font-bold text-blue-400">{properties.filter(p => p.tenant && p.tenant.name).length}</p>
-                      <p className="text-xs text-white/40">{properties.filter(p => p.tenant?.status === 'active').length} active</p>
+                      <p className="text-2xl font-bold text-blue-400">{properties.reduce((sum, p) => sum + getPropertyTenants(p).length, 0)}</p>
+                      <p className="text-xs text-white/40">{properties.reduce((sum, p) => sum + getPropertyTenants(p).filter(t => t.status === 'active').length, 0)} active</p>
                     </button>
                     {(() => {
                       const currentYear = new Date().getFullYear().toString();
@@ -749,8 +754,9 @@ export default function RainbowRentals() {
                         <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
                           <h3 className="text-sm font-semibold text-orange-400 mb-2">Lease Expired</h3>
                           {leaseExpiredProperties.map(p => {
-                            const endDate = p.tenant?.leaseEnd;
-                            const endLabel = endDate ? ` — ${new Date(endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : '';
+                            const tenants = getPropertyTenants(p);
+                            const earliestEnd = tenants.map(t => t.leaseEnd).filter(Boolean).sort()[0];
+                            const endLabel = earliestEnd ? ` — ${new Date(earliestEnd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : '';
                             return (
                               <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
                                 className="block text-sm text-white/70 hover:text-white transition py-1">
@@ -764,7 +770,9 @@ export default function RainbowRentals() {
                         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4">
                           <h3 className="text-sm font-semibold text-yellow-400 mb-2">Leases Expiring Soon</h3>
                           {expiringLeases.map(p => {
-                            const end = new Date(p.tenant.leaseEnd + 'T00:00:00');
+                            const tenants = getPropertyTenants(p);
+                            const soonestEnd = tenants.map(t => t.leaseEnd).filter(Boolean).sort()[0];
+                            const end = soonestEnd ? new Date(soonestEnd + 'T00:00:00') : new Date();
                             const today = new Date(); today.setHours(0,0,0,0);
                             const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
                             return (
@@ -859,11 +867,13 @@ export default function RainbowRentals() {
                       property={selectedProperty}
                       onBack={() => setSelectedProperty(null)}
                       onEdit={() => setShowNewPropertyModal(selectedProperty)}
-                      onEditTenant={() => setShowTenantModal(selectedProperty)}
-                      onAddTenant={() => setShowTenantModal(selectedProperty)}
-                      onRemoveTenant={() => {
-                        removeTenant(selectedProperty.id);
-                        setSelectedProperty({ ...selectedProperty, tenant: null });
+                      onEditTenant={(tenant) => setShowTenantModal({ ...selectedProperty, _editTenant: tenant })}
+                      onAddTenant={() => setShowTenantModal({ ...selectedProperty, _addNew: true })}
+                      onRemoveTenant={(tenantId) => {
+                        removeTenant(selectedProperty.id, tenantId);
+                        // Refresh selectedProperty
+                        const updatedTenants = getPropertyTenants(selectedProperty).filter(t => String(t.id) !== String(tenantId));
+                        setSelectedProperty({ ...selectedProperty, tenants: updatedTenants, tenant: updatedTenants[0] || null });
                       }}
                       onDelete={() => {
                         setConfirmDialog({
@@ -981,7 +991,11 @@ export default function RainbowRentals() {
                             </div>
                             <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
                               <p className="text-white/40 text-xs mb-1">Monthly Rent</p>
-                              <p className="text-3xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => sum + (parseFloat(p.tenant?.monthlyRent || p.monthlyRent) || 0), 0))}</p>
+                              <p className="text-3xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => {
+                                const tenants = getPropertyTenants(p);
+                                if (tenants.length > 0) return sum + tenants.reduce((ts, t) => ts + (parseFloat(t.monthlyRent) || 0), 0);
+                                return sum + (parseFloat(p.monthlyRent) || 0);
+                              }, 0))}</p>
                             </div>
                           </div>
                         </div>
@@ -995,9 +1009,9 @@ export default function RainbowRentals() {
               {activeSection === 'tenants' && (
                 <TenantsList
                   properties={properties}
-                  onEditTenant={(propertyId) => {
+                  onEditTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
-                    if (prop) setShowTenantModal(prop);
+                    if (prop) setShowTenantModal({ ...prop, _editTenant: tenant || null });
                   }}
                   onAddTenant={() => {
                     // Open tenant modal for first property or show property selector
@@ -1356,7 +1370,7 @@ export default function RainbowRentals() {
           <TenantModal
             property={showTenantModal}
             properties={properties}
-            tenant={showTenantModal?.tenant}
+            tenant={showTenantModal?._editTenant || (showTenantModal?._addNew ? null : null)}
             onSave={(tenantData, overridePropertyId) => {
               // Determine target property ID
               const targetId = overridePropertyId || showTenantModal.id;
@@ -1364,15 +1378,25 @@ export default function RainbowRentals() {
                 showToast('No property selected', 'error');
                 return;
               }
-              // Convert to match property id type for strict equality
               const targetProp = properties.find(p => String(p.id) === String(targetId));
               if (!targetProp) {
                 showToast('Property not found', 'error');
                 return;
               }
-              updateTenant(targetProp.id, tenantData);
+              // If editing an existing tenant, preserve their ID
+              const editingTenant = showTenantModal?._editTenant;
+              const dataWithId = editingTenant?.id ? { ...tenantData, id: editingTenant.id } : tenantData;
+              addOrUpdateTenant(targetProp.id, dataWithId);
+              // Refresh selectedProperty if viewing it
               if (selectedProperty && String(selectedProperty.id) === String(targetProp.id)) {
-                setSelectedProperty({ ...selectedProperty, tenant: { ...selectedProperty.tenant, ...tenantData } });
+                // Re-fetch from properties after next render
+                setTimeout(() => {
+                  setProperties(prev => {
+                    const updated = prev.find(p => String(p.id) === String(targetProp.id));
+                    if (updated) setSelectedProperty({ ...updated });
+                    return prev;
+                  });
+                }, 100);
               }
               setShowTenantModal(null);
             }}

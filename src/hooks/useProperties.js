@@ -1,29 +1,33 @@
 import { useState, useCallback, useRef } from 'react';
 
 /**
+ * Helper: get tenants array from a property, handling legacy single-tenant data.
+ * Legacy: property.tenant = { name, email, ... }
+ * New:    property.tenants = [{ id, name, email, ... }, ...]
+ */
+export const getPropertyTenants = (property) => {
+  if (!property) return [];
+  if (Array.isArray(property.tenants) && property.tenants.length > 0) return property.tenants;
+  if (property.tenant && property.tenant.name) return [{ id: 'legacy', ...property.tenant }];
+  return [];
+};
+
+/**
  * useProperties Hook
  * Manages all Properties data and operations in one place
- * Returns an object with state and callbacks ready to use
+ * Supports multiple tenants per property via property.tenants array.
  */
-
 export const useProperties = (currentUser, saveProperties, showToast) => {
-  // Keep a ref to saveProperties so callbacks always use the latest version
-  // without needing it in their dependency arrays (avoids stale closure bugs)
   const saveRef = useRef(saveProperties);
   saveRef.current = saveProperties;
 
-  // ========== STATE ==========
   const [properties, setProperties] = useState([]);
   const [selectedProperty, setSelectedProperty] = useState(null);
-  const [propertyViewMode, setPropertyViewMode] = useState('grid'); // 'grid' | 'tasks' | 'overview'
-  const [showNewPropertyModal, setShowNewPropertyModal] = useState(null); // null | 'create' | property object (edit)
-  const [showTenantModal, setShowTenantModal] = useState(null); // null | { propertyId, tenantData } (edit) | { propertyId } (create)
+  const [propertyViewMode, setPropertyViewMode] = useState('grid');
+  const [showNewPropertyModal, setShowNewPropertyModal] = useState(null);
+  const [showTenantModal, setShowTenantModal] = useState(null);
 
   // ========== PROPERTY CRUD ==========
-  // All CRUD functions use functional state updates (prev =>) to avoid stale closure bugs.
-  // This is critical because async operations (e.g. photo uploads) can complete after
-  // properties state has changed, and stale closures would overwrite newer data.
-
   const addProperty = useCallback((property) => {
     setProperties(prev => {
       const newProperties = [...prev, property];
@@ -33,7 +37,6 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
     showToast('Property added', 'success');
   }, [showToast]);
 
-  // updates can be an object OR a function (currentProperty) => partialUpdates
   const updateProperty = useCallback((propertyId, updates) => {
     setProperties(prev => {
       const newProperties = prev.map(p => {
@@ -60,14 +63,40 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
     }
   }, [selectedProperty, showToast]);
 
-  // ========== TENANT CRUD ==========
-  const updateTenant = useCallback((propertyId, tenantData) => {
+  // ========== TENANT CRUD (multi-tenant) ==========
+
+  // Add or update a tenant. If tenantData.id exists, updates that tenant; otherwise adds new.
+  const addOrUpdateTenant = useCallback((propertyId, tenantData) => {
     let matched = false;
     setProperties(prev => {
       const newProperties = prev.map(p => {
         if (String(p.id) === String(propertyId)) {
           matched = true;
-          return { ...p, tenant: { ...p.tenant, ...tenantData } };
+          const currentTenants = getPropertyTenants(p);
+
+          let newTenants;
+          if (tenantData.id && tenantData.id !== 'legacy') {
+            // Update existing tenant
+            newTenants = currentTenants.map(t =>
+              String(t.id) === String(tenantData.id) ? { ...t, ...tenantData } : t
+            );
+          } else {
+            // Add new tenant (assign ID, strip legacy id)
+            const newTenant = { ...tenantData, id: Date.now().toString() };
+            delete newTenant._isNew;
+            newTenants = [...currentTenants.filter(t => t.id !== 'legacy'), newTenant];
+            // If editing the legacy tenant, replace it
+            if (tenantData.id === 'legacy') {
+              newTenants = [{ ...tenantData, id: Date.now().toString() }];
+              // Re-add any non-legacy tenants
+              const nonLegacy = currentTenants.filter(t => t.id !== 'legacy');
+              newTenants = [...newTenants, ...nonLegacy];
+            }
+          }
+
+          // Also set legacy .tenant to first tenant for backward compat
+          const firstTenant = newTenants[0] || null;
+          return { ...p, tenants: newTenants, tenant: firstTenant };
         }
         return p;
       });
@@ -75,22 +104,27 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
         saveRef.current(newProperties);
         return newProperties;
       }
-      return prev; // don't update state if nothing matched
+      return prev;
     });
-    // Toast after setState (matched will be set by the updater since it runs sync)
     if (matched) {
       showToast('Tenant saved', 'success');
     } else {
-      console.error('updateTenant: no property matched id', propertyId);
+      console.error('addOrUpdateTenant: no property matched id', propertyId);
       showToast('Error: property not found', 'error');
     }
   }, [showToast]);
 
-  const removeTenant = useCallback((propertyId) => {
+  // Remove a specific tenant by ID
+  const removeTenant = useCallback((propertyId, tenantId) => {
     setProperties(prev => {
       const newProperties = prev.map(p => {
         if (String(p.id) === String(propertyId)) {
-          return { ...p, tenant: null };
+          const currentTenants = getPropertyTenants(p);
+          const newTenants = tenantId
+            ? currentTenants.filter(t => String(t.id) !== String(tenantId))
+            : []; // If no tenantId, remove all (backward compat)
+          const firstTenant = newTenants[0] || null;
+          return { ...p, tenants: newTenants, tenant: firstTenant };
         }
         return p;
       });
@@ -100,34 +134,22 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
     showToast('Tenant removed', 'info');
   }, [showToast]);
 
-  // ========== RETURN CONTEXT VALUE ==========
   return {
-    // Data
     properties,
     selectedProperty,
     propertyViewMode,
     showNewPropertyModal,
     showTenantModal,
-
-    // Property operations
     addProperty,
     updateProperty,
     deleteProperty,
-
-    // Tenant operations
-    updateTenant,
+    addOrUpdateTenant,
     removeTenant,
-
-    // Setters for UI state
     setSelectedProperty,
     setPropertyViewMode,
     setShowNewPropertyModal,
     setShowTenantModal,
-
-    // Setters for loading data from Firebase
     setProperties,
-
-    // Utilities
     showToast,
   };
 };

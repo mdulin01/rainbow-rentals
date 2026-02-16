@@ -1,44 +1,50 @@
 import React, { useState } from 'react';
-import { MoreVertical, MapPin, User, DollarSign, Calendar, Trash2, Edit3, Eye, FileText, Clock } from 'lucide-react';
-import { tenantStatuses, propertyStatuses } from '../../constants';
+import { MoreVertical, MapPin, User, DollarSign, Trash2, Edit3, Eye, FileText, Clock, Users } from 'lucide-react';
+import { propertyStatuses } from '../../constants';
+import { getPropertyTenants } from '../../hooks/useProperties';
 
 const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [], onViewDocument }) => {
   const [showMenu, setShowMenu] = useState(false);
+
+  const tenants = getPropertyTenants(property);
 
   // Find lease document for this property
   const leaseDoc = documents.find(
     d => String(d.propertyId) === String(property.id) && d.type === 'lease' && d.fileUrl
   );
 
-  // Property status (stored on property, or derive from tenant)
-  const propStatus = property.propertyStatus || (property.tenant?.name ? 'occupied' : 'vacant');
-  const statusObj = propertyStatuses.find(s => s.value === propStatus) || propertyStatuses[1]; // default vacant
+  // Property status
+  const propStatus = property.propertyStatus || (tenants.length > 0 ? 'occupied' : 'vacant');
+  const statusObj = propertyStatuses.find(s => s.value === propStatus) || propertyStatuses[1];
 
-  // Lease expiry calculations
+  // Lease expiry - use earliest expiring lease across all tenants
   const getLeaseInfo = () => {
-    if (!property.tenant?.leaseEnd) return null;
-    const leaseEnd = new Date(property.tenant.leaseEnd + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffTime = leaseEnd - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const leaseEnds = tenants
+      .filter(t => t.leaseEnd)
+      .map(t => ({ date: new Date(t.leaseEnd + 'T00:00:00'), raw: t.leaseEnd }));
+    if (leaseEnds.length === 0) return null;
+
+    // Sort by date, earliest first
+    leaseEnds.sort((a, b) => a.date - b.date);
+    const earliest = leaseEnds[0];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((earliest.date - today) / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      // Expired - show expiry month/year
-      const month = leaseEnd.getMonth() + 1;
-      const year = leaseEnd.getFullYear();
+      const month = earliest.date.getMonth() + 1;
+      const year = earliest.date.getFullYear();
       return { expired: true, text: `Expired ${month}/${year}`, days: diffDays };
     }
     if (diffDays <= 90) {
       return { expired: false, text: `${diffDays}d left`, days: diffDays };
     }
-    // More than 90 days - show end date
-    const month = leaseEnd.getMonth() + 1;
-    const year = leaseEnd.getFullYear();
+    const month = earliest.date.getMonth() + 1;
+    const year = earliest.date.getFullYear();
     return { expired: false, text: `Ends ${month}/${year}`, days: diffDays };
   };
 
   const leaseInfo = getLeaseInfo();
+  const tenantNames = tenants.map(t => t.name).filter(Boolean).join(', ');
 
   return (
     <div
@@ -77,7 +83,6 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
 
       {/* Content */}
       <div className="p-3">
-        {/* Header with menu */}
         <div className="flex items-start justify-between mb-1.5">
           <div className="flex-1 min-w-0">
             <h3 className="text-white font-semibold text-sm truncate">{property.name}</h3>
@@ -97,28 +102,20 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
             >
               <MoreVertical className="w-4 h-4" />
             </button>
-
             {showMenu && (
               <>
-                {/* Click-away overlay */}
                 <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-white/15 rounded-xl shadow-2xl z-50 min-w-[120px]">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onEdit(property); setShowMenu(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-slate-200 hover:bg-white/10 transition text-sm"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); onEdit(property); setShowMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-slate-200 hover:bg-white/10 transition text-sm">
                     <Edit3 className="w-3.5 h-3.5" /> Edit
                   </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onViewDetails(property); setShowMenu(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-slate-200 hover:bg-white/10 transition text-sm border-t border-white/10"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); onViewDetails(property); setShowMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-slate-200 hover:bg-white/10 transition text-sm border-t border-white/10">
                     <Eye className="w-3.5 h-3.5" /> View
                   </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(property.id); setShowMenu(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 transition text-sm border-t border-white/10"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); onDelete(property.id); setShowMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 transition text-sm border-t border-white/10">
                     <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
                 </div>
@@ -130,22 +127,17 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
         {/* Tenant row */}
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-1.5 min-w-0">
-            <User className="w-3 h-3 text-slate-400 flex-shrink-0" />
-            {property.tenant?.name ? (
-              <span className="text-white/80 truncate">{property.tenant.name}</span>
+            {tenants.length > 1 ? <Users className="w-3 h-3 text-slate-400 flex-shrink-0" /> : <User className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+            {tenantNames ? (
+              <span className="text-white/80 truncate">{tenantNames}</span>
             ) : (
               <span className="text-slate-500 italic">Vacant</span>
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-            {/* Lease doc icon */}
             {leaseDoc && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onViewDocument) onViewDocument(leaseDoc);
-                  else window.open(leaseDoc.fileUrl, '_blank');
-                }}
+                onClick={(e) => { e.stopPropagation(); onViewDocument ? onViewDocument(leaseDoc) : window.open(leaseDoc.fileUrl, '_blank'); }}
                 className="p-0.5 text-blue-400 hover:text-blue-300 transition"
                 title="View Lease"
               >

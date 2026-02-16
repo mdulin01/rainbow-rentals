@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import { rentStatuses } from '../../constants';
 import { formatDate, formatCurrency } from '../../utils';
+import { getPropertyTenants } from '../../hooks/useProperties';
 
 export default function RentLedger({ rentPayments, properties, onAdd, onEdit, onDelete, showToast }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,7 +19,9 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
 
   const getTenantName = (propertyId) => {
     const p = properties.find(pr => pr.id === propertyId);
-    return p?.tenant?.name || '—';
+    if (!p) return '—';
+    const tenants = getPropertyTenants(p);
+    return tenants.map(t => t.name).filter(Boolean).join(', ') || '—';
   };
 
   // Filter
@@ -81,7 +84,11 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
   };
 
   // Summary stats
-  const totalExpected = properties.reduce((sum, p) => sum + (parseFloat(p.tenant?.monthlyRent || p.monthlyRent) || 0), 0);
+  const totalExpected = properties.reduce((sum, p) => {
+    const tenants = getPropertyTenants(p);
+    if (tenants.length > 0) return sum + tenants.reduce((ts, t) => ts + (parseFloat(t.monthlyRent) || 0), 0);
+    return sum + (parseFloat(p.monthlyRent) || 0);
+  }, 0);
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const thisMonthPayments = rentPayments.filter(r => r.month === currentMonth);

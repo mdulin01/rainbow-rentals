@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Edit3, MapPin, User, DollarSign, Calendar, Phone, Mail, FileText, Image, Trash2, Plus, Lightbulb, X } from 'lucide-react';
 import { tenantStatuses } from '../../constants';
+import { getPropertyTenants } from '../../hooks/useProperties';
 
 const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAddTenant, onRemoveTenant, onUpdateProperty }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -16,22 +17,20 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
     );
   }
 
-  // Get tenant status info
+  const tenants = getPropertyTenants(property);
+
   const getTenantStatusInfo = (status) => {
     return tenantStatuses.find(s => s.value === status);
   };
 
-  // Calculate days until lease expiration
-  const getDaysUntilExpiration = () => {
-    if (!property.tenant?.leaseEnd) return null;
-    const leaseEnd = new Date(property.tenant.leaseEnd);
+  const getDaysUntilExpiration = (leaseEnd) => {
+    if (!leaseEnd) return null;
+    const end = new Date(leaseEnd);
     const today = new Date();
-    const diffTime = leaseEnd - today;
+    const diffTime = end - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
   };
-
-  const daysLeft = getDaysUntilExpiration();
 
   return (
     <div className="h-full flex flex-col bg-slate-900/50">
@@ -39,10 +38,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
       <div className="sticky top-0 z-20 bg-slate-800/95 border-b border-white/15">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
-            <button
-              onClick={onBack}
-              className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
-            >
+            <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white">
               <ArrowLeft className="w-6 h-6" />
             </button>
             <div>
@@ -54,16 +50,10 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onEdit(property)}
-              className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
-            >
+            <button onClick={() => onEdit(property)} className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white">
               <Edit3 className="w-6 h-6" />
             </button>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="p-2 hover:bg-red-500/10 rounded-lg transition text-slate-400 hover:text-red-400"
-            >
+            <button onClick={() => setShowDeleteConfirm(true)} className="p-2 hover:bg-red-500/10 rounded-lg transition text-slate-400 hover:text-red-400">
               <Trash2 className="w-6 h-6" />
             </button>
           </div>
@@ -76,9 +66,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`py-3 px-1 border-b-2 transition capitalize ${
-                activeTab === tab
-                  ? 'border-emerald-500 text-white'
-                  : 'border-transparent text-slate-400 hover:text-white'
+                activeTab === tab ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-white'
               }`}
             >
               {tab}
@@ -116,158 +104,107 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Purchase Price</p>
-                  <p className="text-white font-medium">
-                    ${property.purchasePrice ? parseFloat(property.purchasePrice).toLocaleString() : '0'}
-                  </p>
+                  <p className="text-white font-medium">${property.purchasePrice ? parseFloat(property.purchasePrice).toLocaleString() : '0'}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Current Value</p>
-                  <p className="text-white font-medium">
-                    ${property.currentValue ? parseFloat(property.currentValue).toLocaleString() : '0'}
-                  </p>
+                  <p className="text-white font-medium">${property.currentValue ? parseFloat(property.currentValue).toLocaleString() : '0'}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Monthly Rent</p>
-                  <p className="text-white font-medium">
-                    ${property.monthlyRent ? parseFloat(property.monthlyRent).toLocaleString() : '0'}/month
-                  </p>
+                  <p className="text-white font-medium">${property.monthlyRent ? parseFloat(property.monthlyRent).toLocaleString() : '0'}/month</p>
                 </div>
               </div>
             </div>
 
-            {/* Tenant Section */}
+            {/* Tenants Section */}
             <div className="bg-slate-800/50 border border-white/15 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Tenant Information</h2>
-                {property.tenant ? (
-                  <button
-                    onClick={() => onRemoveTenant()}
-                    className="text-sm px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition"
-                  >
-                    Remove
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onAddTenant()}
-                    className="text-sm px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Tenant
-                  </button>
-                )}
+                <h2 className="text-xl font-bold text-white">Tenants ({tenants.length})</h2>
+                <button
+                  onClick={() => onAddTenant()}
+                  className="text-sm px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Tenant
+                </button>
               </div>
 
-              {property.tenant ? (
+              {tenants.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                        <User className="w-4 h-4" />
-                        Name
-                      </p>
-                      <p className="text-white font-medium">{property.tenant.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-sm mb-1">Status</p>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold ${getTenantStatusInfo(property.tenant.status)?.color}`}>
-                          {getTenantStatusInfo(property.tenant.status)?.label}
-                        </span>
-                      </div>
-                    </div>
-                    {property.tenant.email && (
-                      <div>
-                        <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                          <Mail className="w-4 h-4" />
-                          Email
-                        </p>
-                        <p className="text-white font-medium">{property.tenant.email}</p>
-                      </div>
-                    )}
-                    {property.tenant.phone && (
-                      <div>
-                        <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                          <Phone className="w-4 h-4" />
-                          Phone
-                        </p>
-                        <p className="text-white font-medium">{property.tenant.phone}</p>
-                      </div>
-                    )}
-                  </div>
+                  {tenants.map((tenant, idx) => {
+                    const daysLeft = getDaysUntilExpiration(tenant.leaseEnd);
+                    return (
+                      <div key={tenant.id || idx} className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <User className="w-5 h-5 text-slate-400" />
+                            <h3 className="text-white font-semibold">{tenant.name}</h3>
+                            <span className={`text-xs font-medium ${getTenantStatusInfo(tenant.status)?.color || 'text-slate-400'}`}>
+                              {getTenantStatusInfo(tenant.status)?.label || tenant.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => onEditTenant(tenant)}
+                              className="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => onRemoveTenant(tenant.id)}
+                              className="px-2 py-1 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
 
-                  {/* Lease Information */}
-                  {(property.tenant.leaseStart || property.tenant.leaseEnd) && (
-                    <div className="pt-4 border-t border-white/10">
-                      <h3 className="text-white font-semibold mb-4">Lease Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {property.tenant.leaseStart && (
-                          <div>
-                            <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
-                              Lease Start
-                            </p>
-                            <p className="text-white font-medium">{property.tenant.leaseStart}</p>
-                          </div>
-                        )}
-                        {property.tenant.leaseEnd && (
-                          <div>
-                            <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
-                              Lease End
-                            </p>
-                            <p className="text-white font-medium">{property.tenant.leaseEnd}</p>
-                            {daysLeft !== null && (
-                              <p className={`text-sm mt-2 ${daysLeft <= 30 ? 'text-orange-400' : 'text-slate-400'}`}>
-                                {daysLeft} days remaining
-                              </p>
-                            )}
-                          </div>
-                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          {tenant.email && (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <Mail className="w-3.5 h-3.5" /> {tenant.email}
+                            </div>
+                          )}
+                          {tenant.phone && (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <Phone className="w-3.5 h-3.5" /> {tenant.phone}
+                            </div>
+                          )}
+                          {tenant.leaseStart && (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <Calendar className="w-3.5 h-3.5" /> Start: {tenant.leaseStart}
+                            </div>
+                          )}
+                          {tenant.leaseEnd && (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <Calendar className="w-3.5 h-3.5" /> End: {tenant.leaseEnd}
+                              {daysLeft !== null && daysLeft <= 60 && (
+                                <span className={`text-xs ml-1 ${daysLeft <= 30 ? 'text-orange-400' : 'text-yellow-400'}`}>
+                                  ({daysLeft}d left)
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {tenant.monthlyRent && (
+                            <div className="flex items-center gap-1.5 text-emerald-400">
+                              <DollarSign className="w-3.5 h-3.5" /> ${parseFloat(tenant.monthlyRent).toLocaleString()}/mo
+                            </div>
+                          )}
+                          {tenant.securityDeposit && (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <DollarSign className="w-3.5 h-3.5" /> Deposit: ${parseFloat(tenant.securityDeposit).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Financial Information */}
-                  {(property.tenant.monthlyRent || property.tenant.securityDeposit) && (
-                    <div className="pt-4 border-t border-white/10">
-                      <h3 className="text-white font-semibold mb-4">Financial Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {property.tenant.monthlyRent && (
-                          <div>
-                            <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
-                              <DollarSign className="w-4 h-4" />
-                              Monthly Rent
-                            </p>
-                            <p className="text-white font-medium">
-                              ${parseFloat(property.tenant.monthlyRent).toLocaleString()}
-                            </p>
-                          </div>
-                        )}
-                        {property.tenant.securityDeposit && (
-                          <div>
-                            <p className="text-slate-400 text-sm mb-1">Security Deposit</p>
-                            <p className="text-white font-medium">
-                              ${parseFloat(property.tenant.securityDeposit).toLocaleString()}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-4">
-                    <button
-                      onClick={() => onEditTenant(property.tenant)}
-                      className="w-full px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition font-medium"
-                    >
-                      Edit Tenant
-                    </button>
-                  </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="py-8 text-center">
                   <User className="w-8 h-8 text-slate-500 mx-auto mb-2 opacity-50" />
-                  <p className="text-slate-400 mb-4">No tenant assigned to this property</p>
+                  <p className="text-slate-400 mb-4">No tenants assigned to this property</p>
                   <button
                     onClick={() => onAddTenant()}
                     className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition font-medium inline-flex items-center gap-2"
@@ -307,24 +244,14 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
               </button>
             </div>
 
-            {/* Add Idea inline form */}
             {showAddIdea && (
               <div className="bg-slate-800/80 border border-white/15 rounded-xl p-4 space-y-3">
-                <input
-                  type="text"
-                  value={ideaForm.title}
-                  onChange={e => setIdeaForm(f => ({ ...f, title: e.target.value }))}
+                <input type="text" value={ideaForm.title} onChange={e => setIdeaForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Idea title (e.g., New kitchen countertops)"
-                  className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50"
-                  autoFocus
-                />
-                <textarea
-                  value={ideaForm.description}
-                  onChange={e => setIdeaForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Details, estimated cost, notes..."
-                  rows={2}
-                  className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50 resize-none"
-                />
+                  className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50" autoFocus />
+                <textarea value={ideaForm.description} onChange={e => setIdeaForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Details, estimated cost, notes..." rows={2}
+                  className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50 resize-none" />
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-white/40">Priority:</label>
                   {['high', 'medium', 'low'].map(p => (
@@ -335,8 +262,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                             : p === 'medium' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
                             : 'bg-white/10 text-white/60 border border-white/20'
                           : 'bg-white/[0.05] text-white/40 border border-transparent hover:bg-white/10'
-                      }`}
-                    >{p}</button>
+                      }`}>{p}</button>
                   ))}
                 </div>
                 <div className="flex justify-end gap-2">
@@ -345,12 +271,8 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                     onClick={() => {
                       if (!ideaForm.title.trim()) return;
                       const ideas = [...(property.ideas || []), {
-                        id: Date.now().toString(),
-                        title: ideaForm.title,
-                        description: ideaForm.description,
-                        priority: ideaForm.priority,
-                        status: 'idea',
-                        createdAt: new Date().toISOString(),
+                        id: Date.now().toString(), title: ideaForm.title, description: ideaForm.description,
+                        priority: ideaForm.priority, status: 'idea', createdAt: new Date().toISOString(),
                       }];
                       onUpdateProperty(property.id, { ideas });
                       setShowAddIdea(false);
@@ -363,7 +285,6 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
               </div>
             )}
 
-            {/* Ideas list */}
             {(property.ideas || []).length === 0 && !showAddIdea && (
               <div className="py-12 text-center text-slate-400">
                 <Lightbulb className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -379,13 +300,11 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         idea.priority === 'high' ? 'bg-red-500/20 text-red-300' :
-                        idea.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
-                        'bg-white/10 text-white/50'
+                        idea.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-white/10 text-white/50'
                       }`}>{idea.priority}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         idea.status === 'done' ? 'bg-green-500/20 text-green-300' :
-                        idea.status === 'in-progress' ? 'bg-blue-500/20 text-blue-300' :
-                        'bg-white/10 text-white/50'
+                        idea.status === 'in-progress' ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-white/50'
                       }`}>{idea.status || 'idea'}</span>
                     </div>
                     <h3 className="text-white font-medium">{idea.title}</h3>
@@ -393,26 +312,18 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                   </div>
                   <div className="flex items-center gap-1 ml-2">
                     {idea.status !== 'done' && (
-                      <button
-                        onClick={() => {
-                          const ideas = (property.ideas || []).map(i =>
-                            i.id === idea.id ? { ...i, status: i.status === 'in-progress' ? 'done' : 'in-progress' } : i
-                          );
-                          onUpdateProperty(property.id, { ideas });
-                        }}
-                        className="p-1.5 hover:bg-white/10 rounded-lg transition text-white/40 hover:text-green-400 text-xs"
-                        title={idea.status === 'in-progress' ? 'Mark done' : 'Start'}
-                      >
+                      <button onClick={() => {
+                        const ideas = (property.ideas || []).map(i => i.id === idea.id ? { ...i, status: i.status === 'in-progress' ? 'done' : 'in-progress' } : i);
+                        onUpdateProperty(property.id, { ideas });
+                      }} className="p-1.5 hover:bg-white/10 rounded-lg transition text-white/40 hover:text-green-400 text-xs"
+                        title={idea.status === 'in-progress' ? 'Mark done' : 'Start'}>
                         {idea.status === 'in-progress' ? '✅' : '▶️'}
                       </button>
                     )}
-                    <button
-                      onClick={() => {
-                        const ideas = (property.ideas || []).filter(i => i.id !== idea.id);
-                        onUpdateProperty(property.id, { ideas });
-                      }}
-                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition text-white/40 hover:text-red-400"
-                    >
+                    <button onClick={() => {
+                      const ideas = (property.ideas || []).filter(i => i.id !== idea.id);
+                      onUpdateProperty(property.id, { ideas });
+                    }} className="p-1.5 hover:bg-red-500/10 rounded-lg transition text-white/40 hover:text-red-400">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -455,30 +366,16 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800/95 border border-white/15 rounded-2xl p-6 max-w-sm">
             <h3 className="text-xl font-bold text-white mb-2">Delete Property?</h3>
-            <p className="text-slate-400 mb-6">
-              This action cannot be undone. All data associated with this property will be permanently deleted.
-            </p>
+            <p className="text-slate-400 mb-6">This action cannot be undone.</p>
             <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  onDelete(property.id);
-                  setShowDeleteConfirm(false);
-                }}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition font-semibold"
-              >
-                Delete
-              </button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Cancel</button>
+              <button onClick={() => { onDelete(property.id); setShowDeleteConfirm(false); }}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition font-semibold">Delete</button>
             </div>
           </div>
         </div>
