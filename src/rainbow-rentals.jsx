@@ -801,93 +801,40 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Dashboard</h2>
 
-                  {/* Summary tiles — single row */}
+                  {/* Outstanding rent card — only shows when rent is due */}
                   {(() => {
-                    const currentYear = new Date().getFullYear().toString();
                     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-                    const monthLabel = new Date().toLocaleString('en-US', { month: 'short' });
-
-                    // Rent collected this month — only from rented properties
+                    const monthLabel = new Date().toLocaleString('en-US', { month: 'long' });
                     const rentedPropIds = new Set(
                       properties
                         .filter(p => ['occupied', 'owner-occupied', 'lease-expired', 'month-to-month'].includes(getEffectiveStatus(p)))
                         .map(p => String(p.id))
                     );
-                    const rentExpectedThisMonth = properties
-                      .filter(p => rentedPropIds.has(String(p.id)))
-                      .reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0);
-                    const monthRentCollected = rentPayments
-                      .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentMonth))
-                      .reduce((sum, r) => sum + (r.amount || 0), 0);
-                    const rentPct = rentExpectedThisMonth > 0 ? Math.round((monthRentCollected / rentExpectedThisMonth) * 100) : 100;
-                    // Properties that haven't paid this month
                     const paidPropIds = new Set(
                       rentPayments
                         .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentMonth))
                         .map(r => String(r.propertyId))
                     );
                     const unpaidProps = properties.filter(p => rentedPropIds.has(String(p.id)) && !paidPropIds.has(String(p.id)));
+                    const totalDue = unpaidProps.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0);
 
-                    // YTD P&L
-                    const ytdRentCollected = rentPayments
-                      .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentYear))
-                      .reduce((sum, r) => sum + (r.amount || 0), 0);
-                    const ytdIncome = transactions
-                      .filter(t => t.type === 'income' && (t.date || '').startsWith(currentYear))
-                      .reduce((sum, t) => sum + (t.amount || 0), 0) + ytdRentCollected;
-                    const ytdTransactionExpenses = transactions
-                      .filter(t => t.type === 'expense' && (t.date || '').startsWith(currentYear))
-                      .reduce((sum, t) => sum + (t.amount || 0), 0);
-                    const ytdExpenseRecords = expenses
-                      .filter(e => e.isTemplate !== true && (e.date || '').startsWith(currentYear))
-                      .reduce((sum, e) => sum + (e.amount || 0), 0);
-                    const ytdExpenses = ytdTransactionExpenses + ytdExpenseRecords;
-                    const ytdProfit = ytdIncome - ytdExpenses;
-                    const openTasks = sharedTasks.filter(t => t.status !== 'done').length;
-                    const totalTasks = sharedTasks.length;
+                    if (unpaidProps.length === 0) return null;
                     return (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                        {/* 1. Tasks */}
-                        <button onClick={() => setActiveSection('dashboard')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
-                          <p className="text-white/40 text-xs mb-1">Tasks</p>
-                          <p className="text-2xl font-bold text-blue-400">{openTasks}</p>
-                          <p className="text-xs text-white/40">{openTasks} open · {totalTasks - openTasks} done</p>
-                        </button>
-                        {/* 2. Unrented */}
-                        <button onClick={() => setActiveSection('rentals')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
-                          <p className="text-white/40 text-xs mb-1">Unrented</p>
-                          <p className={`text-2xl font-bold ${notCollectingRent.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{notCollectingRent.length}</p>
-                          {notCollectingRent.length > 0 ? (
-                            <div className="mt-1 space-y-0.5">
-                              {notCollectingRent.slice(0, 3).map(p => (
-                                <p key={p.id} className="text-[10px] text-white/40 truncate leading-tight">{p.emoji || '🏠'} {p.name}</p>
-                              ))}
-                              {notCollectingRent.length > 3 && <p className="text-[10px] text-white/30">+{notCollectingRent.length - 3} more</p>}
+                      <button onClick={() => setActiveSection('rent')}
+                        className="w-full bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6 text-left hover:bg-red-500/15 transition cursor-pointer">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-red-400">Outstanding Rent — {monthLabel}</h3>
+                          <p className="text-xl font-bold text-red-400">{formatCurrency(totalDue)}</p>
+                        </div>
+                        <div className="space-y-1">
+                          {unpaidProps.map(p => (
+                            <div key={p.id} className="flex items-center justify-between text-sm">
+                              <span className="text-white/60">{p.emoji || '🏠'} {p.name}</span>
+                              <span className="text-red-400/70">{formatCurrency(parseFloat(p.monthlyRent) || 0)}</span>
                             </div>
-                          ) : (
-                            <p className="text-xs text-white/40">All collecting</p>
-                          )}
-                        </button>
-                        {/* 3. Rent Collected (this month) */}
-                        <button onClick={() => setActiveSection('rent')} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
-                          <p className="text-white/40 text-xs mb-1">{monthLabel} Rent</p>
-                          <p className={`text-2xl font-bold ${rentPct >= 100 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(monthRentCollected)}</p>
-                          <p className={`text-xs ${rentPct >= 100 ? 'text-white/40' : 'text-red-400/70'}`}>of {formatCurrency(rentExpectedThisMonth)}</p>
-                          {unpaidProps.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {unpaidProps.slice(0, 3).map(p => (
-                                <p key={p.id} className="text-[10px] text-red-400/60 truncate leading-tight">{p.emoji || '🏠'} {p.name}</p>
-                              ))}
-                              {unpaidProps.length > 3 && <p className="text-[10px] text-red-400/40">+{unpaidProps.length - 3} more</p>}
-                            </div>
-                          )}
-                        </button>
-                        {/* 4. YTD Profit / Loss */}
-                        <button onClick={() => setShowPropertyBreakdown(true)} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 text-left hover:bg-white/[0.08] transition cursor-pointer">
-                          <p className="text-white/40 text-xs mb-1">YTD Profit / Loss</p>
-                          <p className={`text-2xl font-bold ${ytdProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(ytdProfit)}</p>
-                        </button>
-                      </div>
+                          ))}
+                        </div>
+                      </button>
                     );
                   })()}
 
