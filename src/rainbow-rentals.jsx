@@ -807,7 +807,7 @@ export default function RainbowRentals() {
                     const monthLabel = new Date().toLocaleString('en-US', { month: 'long' });
                     const rentedPropIds = new Set(
                       properties
-                        .filter(p => ['occupied', 'owner-occupied', 'lease-expired', 'month-to-month'].includes(getEffectiveStatus(p)))
+                        .filter(p => ['occupied', 'lease-expired', 'month-to-month'].includes(getEffectiveStatus(p)))
                         .map(p => String(p.id))
                     );
                     const paidPropIds = new Set(
