@@ -15,6 +15,13 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
     purchasePrice: '',
     currentValue: '',
     monthlyRent: '',
+    hasMortgage: false,
+    mortgageBalance: '',
+    mortgageAPR: '',
+    mortgageMonthlyPayment: '',
+    escrowMonthly: '',
+    mortgageLender: '',
+    mortgageStartDate: '',
     notes: '',
     color: 'from-teal-400 to-cyan-500',
     emoji: '🏠',
@@ -50,6 +57,13 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
       purchasePrice: '',
       currentValue: '',
       monthlyRent: '',
+      hasMortgage: false,
+      mortgageBalance: '',
+      mortgageAPR: '',
+      mortgageMonthlyPayment: '',
+      escrowMonthly: '',
+      mortgageLender: '',
+      mortgageStartDate: '',
       notes: '',
       color: 'from-teal-400 to-cyan-500',
       emoji: '🏠',
@@ -315,6 +329,98 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Mortgage Information */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold">Mortgage Information</h3>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({
+                  ...prev,
+                  hasMortgage: !prev.hasMortgage,
+                  ...(!prev.hasMortgage ? {} : { mortgageBalance: '', mortgageAPR: '', mortgageMonthlyPayment: '', escrowMonthly: '', mortgageLender: '', mortgageStartDate: '' })
+                }))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
+                  formData.hasMortgage
+                    ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                    : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
+                }`}
+              >
+                {formData.hasMortgage ? 'Has Mortgage' : 'No Mortgage'}
+              </button>
+            </div>
+            {formData.hasMortgage && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">Lender</label>
+                  <input
+                    type="text"
+                    name="mortgageLender"
+                    value={formData.mortgageLender || ''}
+                    onChange={handleChange}
+                    placeholder="e.g., Chase, Wells Fargo"
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">Loan Balance</label>
+                  <input
+                    type="number"
+                    name="mortgageBalance"
+                    value={formData.mortgageBalance || ''}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">APR (%)</label>
+                  <input
+                    type="number"
+                    name="mortgageAPR"
+                    value={formData.mortgageAPR || ''}
+                    onChange={handleChange}
+                    placeholder="e.g., 6.5"
+                    step="0.01"
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">Monthly P&I Payment</label>
+                  <input
+                    type="number"
+                    name="mortgageMonthlyPayment"
+                    value={formData.mortgageMonthlyPayment || ''}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">Monthly Escrow (Tax + Insurance)</label>
+                  <input
+                    type="number"
+                    name="escrowMonthly"
+                    value={formData.escrowMonthly || ''}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-2">Loan Start Date</label>
+                  <input
+                    type="date"
+                    name="mortgageStartDate"
+                    value={formData.mortgageStartDate || ''}
+                    onChange={handleChange}
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Customization */}

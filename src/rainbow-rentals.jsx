@@ -1078,13 +1078,14 @@ export default function RainbowRentals() {
 
                       {/* Properties Grid */}
                       {propertyViewMode === 'grid' && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 gap-4">
                           {properties.map(property => (
                             <PropertyCard
                               key={property.id}
                               property={property}
                               documents={documents}
                               expenses={expenses}
+                              rentPayments={rentPayments}
                               onViewDetails={() => setSelectedProperty(property)}
                               onEdit={() => setShowNewPropertyModal(property)}
                               onDelete={() => {
