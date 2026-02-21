@@ -245,11 +245,11 @@ export default function RainbowRentals() {
     if (!user) return;
     if (!hubDataLoadedRef.current) return;
     try {
-      const updates = { lastUpdated: new Date().toISOString(), updatedBy: currentUser };
+      const updates = { lastUpdated: new Date().toISOString(), updatedBy: currentUser || 'unknown' };
       if (newLists !== null && newLists !== undefined) updates.lists = newLists;
       if (newTasks !== null && newTasks !== undefined) updates.tasks = newTasks;
       if (newIdeas !== null && newIdeas !== undefined) updates.ideas = newIdeas;
-      await setDoc(doc(db, 'rentalData', 'sharedHub'), updates, { merge: true });
+      await setDoc(doc(db, 'rentalData', 'sharedHub'), JSON.parse(JSON.stringify(updates)), { merge: true });
     } catch (error) {
       console.error('Error saving shared hub:', error);
       showToast('Failed to save. Please try again.', 'error');
@@ -261,11 +261,11 @@ export default function RainbowRentals() {
   const savePropertiesToFirestore = useCallback(async (newProperties) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'rentalData', 'properties'), {
+      await setDoc(doc(db, 'rentalData', 'properties'), JSON.parse(JSON.stringify({
         properties: newProperties,
         lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser
-      }, { merge: true });
+        updatedBy: currentUser || 'unknown'
+      })), { merge: true });
     } catch (error) {
       console.error('Error saving properties:', error);
       showToast('Failed to save property data.', 'error');
@@ -277,11 +277,11 @@ export default function RainbowRentals() {
   const saveDocumentsToFirestore = useCallback(async (newDocuments) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'rentalData', 'documents'), {
+      await setDoc(doc(db, 'rentalData', 'documents'), JSON.parse(JSON.stringify({
         documents: newDocuments,
         lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser
-      }, { merge: true });
+        updatedBy: currentUser || 'unknown'
+      })), { merge: true });
     } catch (error) {
       console.error('Error saving documents:', error);
       showToast('Failed to save document data.', 'error');
@@ -293,11 +293,11 @@ export default function RainbowRentals() {
   const saveFinancialsToFirestore = useCallback(async (newTransactions) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'rentalData', 'financials'), {
+      await setDoc(doc(db, 'rentalData', 'financials'), JSON.parse(JSON.stringify({
         transactions: newTransactions,
         lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser
-      }, { merge: true });
+        updatedBy: currentUser || 'unknown'
+      })), { merge: true });
     } catch (error) {
       console.error('Error saving financials:', error);
       showToast('Failed to save financial data.', 'error');
@@ -309,11 +309,11 @@ export default function RainbowRentals() {
   const saveRentToFirestore = useCallback(async (newRentPayments) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'rentalData', 'rent'), {
+      await setDoc(doc(db, 'rentalData', 'rent'), JSON.parse(JSON.stringify({
         payments: newRentPayments,
         lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser
-      }, { merge: true });
+        updatedBy: currentUser || 'unknown'
+      })), { merge: true });
     } catch (error) {
       console.error('Error saving rent data:', error);
       showToast('Failed to save rent data.', 'error');
