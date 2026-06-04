@@ -41,6 +41,7 @@ import TenantsList from './components/Tenants/TenantsList';
 // Rent components
 import RentLedger from './components/Rent/RentLedger';
 import AddRentPaymentModal from './components/Rent/AddRentPaymentModal';
+import RentReconciliation from './components/Rent/RentReconciliation';
 
 // Expenses components
 import ExpensesList from './components/Expenses/ExpensesList';
@@ -632,6 +633,7 @@ export default function RainbowRentals() {
     { id: 'tenants', label: 'Tenants', emoji: '👤' },
     { id: 'rent', label: 'Income', emoji: '💰' },
     { id: 'expenses', label: 'Expenses', emoji: '💸' },
+    { id: 'reconcile', label: 'Reconcile', emoji: '⚖️' },
     { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
     { id: 'documents', label: 'Documents', emoji: '📄' },
   ];
@@ -734,6 +736,7 @@ export default function RainbowRentals() {
                   { id: 'tenants', label: 'Tenants', emoji: '👤' },
                   { id: 'rent', label: 'Income', emoji: '💰' },
                   { id: 'expenses', label: 'Expenses', emoji: '💸' },
+                  { id: 'reconcile', label: 'Reconcile', emoji: '⚖️' },
                   { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
                   { id: 'documents', label: 'Documents', emoji: '📄' },
                 ].map(tab => (
@@ -809,6 +812,26 @@ export default function RainbowRentals() {
           ) : (
             <>
               {/* ========== DASHBOARD SECTION ========== */}
+              {activeSection === 'reconcile' && (
+                <RentReconciliation
+                  properties={properties}
+                  rentPayments={rentPayments}
+                  getEffectiveStatus={getEffectiveStatus}
+                  onRecordRent={(prop, monthKey, cell) => {
+                    const shortfall = cell && cell.state === 'short' ? (cell.expected - cell.received) : null;
+                    setShowAddRentModal({
+                      incomeType: 'rent',
+                      propertyId: prop.id,
+                      propertyName: `${prop.emoji || '\u{1F3E0}'} ${prop.name}`,
+                      tenantName: getPropertyTenants(prop).map(t => t.name).filter(Boolean).join(', '),
+                      month: monthKey,
+                      amount: shortfall != null ? shortfall : (parseFloat(prop.monthlyRent) || ''),
+                      status: 'paid',
+                    });
+                  }}
+                />
+              )}
+
               {activeSection === 'dashboard' && (
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Dashboard</h2>

@@ -19,15 +19,17 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
   });
 
   useEffect(() => {
-    if (isEditing) {
+    // Prefill from any provided payment object (editing OR a reconciliation prefill).
+    if (payment) {
+      const now = new Date();
       setForm({
         incomeType: payment.incomeType || 'rent',
         propertyId: payment.propertyId || '',
         tenantName: payment.tenantName || '',
         propertyName: payment.propertyName || '',
         month: payment.month || '',
-        amount: payment.amount || '',
-        datePaid: payment.datePaid || '',
+        amount: payment.amount ?? '',
+        datePaid: payment.datePaid || now.toISOString().split('T')[0],
         status: payment.status || 'paid',
         notes: payment.notes || '',
       });
