@@ -14,6 +14,7 @@ import {
 
 // Components
 import LoginScreen from './components/LoginScreen';
+import RupertBanner from './components/RupertBanner';
 import ConfirmDialog from './components/ConfirmDialog';
 
 // Hub components (tasks still used on Dashboard)
@@ -802,6 +803,8 @@ export default function RainbowRentals() {
             </div>
           )}
         </header>
+
+        <RupertBanner db={db} accent="#fb7185" />
 
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 py-4 pb-32">
