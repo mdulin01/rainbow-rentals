@@ -2219,9 +2219,9 @@ export default function RainbowRentals() {
             )}
 
             {/* Nav bar */}
-            <div className="relative bg-slate-900 border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-              {/* Tab buttons — all 6 sections */}
-              <div className="flex items-end justify-around px-1 pt-1 pb-1">
+            <div className="relative mx-auto w-fit max-w-[97vw] bg-slate-900/80 backdrop-blur-xl border border-slate-600/40 rounded-full shadow-2xl" style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+              {/* Tab buttons — all sections, floating dock */}
+              <div className="flex items-end justify-around gap-0.5 px-2 pt-1 pb-1 overflow-x-auto">
                 {[
                   { id: 'action-items', label: 'Actions', emoji: '✅', gradient: 'from-indigo-400 to-purple-500' },
                   { id: 'rentals', label: 'Props', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
