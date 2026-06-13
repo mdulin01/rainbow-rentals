@@ -2238,12 +2238,12 @@ export default function RainbowRentals() {
                       if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
                       setShowAddNewMenu(false);
                     }}
-                    className="relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all active:scale-95 min-w-[44px]"
+                    className="relative flex flex-col items-center justify-center py-2 rounded-xl transition-all active:scale-95 min-w-[48px]"
                   >
-                    <span className={`text-base mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
+                    <span className={`text-xl mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
                       {section.emoji}
                     </span>
-                    <span className={`text-[9px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
+                    <span className={`text-[10px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
                       {section.label}
                     </span>
                     {activeSection === section.id && (
