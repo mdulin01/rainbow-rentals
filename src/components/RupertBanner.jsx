@@ -53,9 +53,9 @@ export default function RupertBanner({ db, accent = '#2dd4bf' }) {
   if (!note.text && !signals.length && !priorities.length) return <FloatingPeacock accent={accent} />;
 
   const S = {
-    wrap: { margin: '12px auto 0', maxWidth: 1120, padding: '0 16px' },
-    card: { position: 'relative', background: `linear-gradient(135deg, ${accent}1a, rgba(15,23,42,.55))`, border: `1px solid ${accent}55`, borderRadius: 14, padding: '13px 15px', display: 'flex', gap: 12, alignItems: 'flex-start', color: '#e8edf5', fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif' },
-    avatar: { fontSize: 24, lineHeight: 1, flex: '0 0 auto', filter: `drop-shadow(0 0 6px ${accent}66)` },
+    wrap: { margin: '16px auto 0', maxWidth: 896, padding: '0 16px', boxSizing: 'border-box', width: '100%' },
+    card: { position: 'relative', background: `linear-gradient(135deg, ${accent}1f, rgba(15,23,42,.5))`, border: `1px solid ${accent}44`, borderRadius: 16, padding: '14px 18px', display: 'flex', gap: 13, alignItems: 'flex-start', color: '#e8edf5', fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', boxShadow: '0 1px 3px rgba(0,0,0,.2)' },
+    avatar: { fontSize: 22, lineHeight: 1, flex: '0 0 auto', filter: `drop-shadow(0 0 6px ${accent}66)`, marginTop: 1 },
     body: { minWidth: 0, flex: 1 },
     name: { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: accent },
     text: { fontSize: 14, lineHeight: 1.5, margin: '2px 0 0', whiteSpace: 'pre-wrap' },
