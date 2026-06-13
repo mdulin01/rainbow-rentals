@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, AlertCircle } from 'lucide-react';
 import { documentTypes } from '../../constants';
+import { todayLocalStr } from '../../utils';
 
 const AddDocumentModal = React.memo(({
   document,
@@ -12,7 +13,7 @@ const AddDocumentModal = React.memo(({
     title: '',
     type: 'other',
     propertyId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: todayLocalStr(),
     amount: '',
     tags: '',
     notes: '',
@@ -31,7 +32,7 @@ const AddDocumentModal = React.memo(({
         title: document.title || '',
         type: document.type || 'other',
         propertyId: document.propertyId || '',
-        date: document.date || new Date().toISOString().split('T')[0],
+        date: document.date || todayLocalStr(),
         amount: document.amount ? String(document.amount) : '',
         tags: document.tags ? document.tags.join(', ') : '',
         notes: document.notes || '',
@@ -44,7 +45,7 @@ const AddDocumentModal = React.memo(({
         title: '',
         type: 'other',
         propertyId: '',
-        date: new Date().toISOString().split('T')[0],
+        date: todayLocalStr(),
         amount: '',
         tags: '',
         notes: '',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Trash2, ImagePlus, RefreshCw } from 'lucide-react';
 import { expenseCategories, recurringFrequencies, MILEAGE_RATE } from '../../constants';
+import { todayLocalStr } from '../../utils';
 
 export default function AddExpenseModal({ expense, properties, onSave, onDelete, onClose, onUploadPhoto }) {
   const isEditing = expense && expense.id;
@@ -49,7 +50,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
         tripTo: expense.tripTo || '',
       });
     } else {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayLocalStr();
       setForm(f => ({ ...f, date: today }));
     }
   }, [expense, isEditing]);

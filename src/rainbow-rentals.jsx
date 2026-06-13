@@ -9,7 +9,7 @@ import {
 } from './constants';
 import {
   formatDate, formatCurrency, validateFileSize, isHeicFile, getSafeFileName,
-  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus
+  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus, todayLocalStr
 } from './utils';
 
 // Components
@@ -645,7 +645,7 @@ export default function RainbowRentals() {
   const todayTasks = pendingTasks.filter(isTaskDueToday);
   const overdueTasks = pendingTasks.filter(t => {
     if (!t.dueDate) return false;
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalStr();
     return t.dueDate < today;
   });
 

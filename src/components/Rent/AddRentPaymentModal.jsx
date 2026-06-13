@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
+import { todayLocalStr } from '../../utils';
 
 export default function AddRentPaymentModal({ payment, properties, onSave, onDelete, onClose }) {
   const isEditing = payment && payment.id;
@@ -29,7 +30,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
         propertyName: payment.propertyName || '',
         month: payment.month || '',
         amount: payment.amount ?? '',
-        datePaid: payment.datePaid || now.toISOString().split('T')[0],
+        datePaid: payment.datePaid || todayLocalStr(),
         status: payment.status || 'paid',
         notes: payment.notes || '',
       });
@@ -37,7 +38,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
       // Default month to current
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      setForm(f => ({ ...f, month: currentMonth, datePaid: now.toISOString().split('T')[0] }));
+      setForm(f => ({ ...f, month: currentMonth, datePaid: todayLocalStr() }));
     }
   }, [payment, isEditing]);
 

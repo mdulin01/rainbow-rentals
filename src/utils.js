@@ -9,6 +9,13 @@ export const parseLocalDate = (dateStr) => {
   return new Date(year, month - 1, day);
 };
 
+// LOCAL (not UTC) YYYY-MM-DD for "today". Never use toISOString() — after ~8pm ET
+// it rolls to tomorrow and keys rent/expense dates to the wrong day.
+export const todayLocalStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const date = parseLocalDate(dateStr);
@@ -54,7 +61,7 @@ export const getDaysUntil = (dateStr) => {
 
 export const isTaskDueToday = (task) => {
   if (!task.dueDate) return false;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocalStr();
   return task.dueDate === today;
 };
 
@@ -73,7 +80,7 @@ export const taskMatchesHorizon = (task, horizon) => {
   if (horizon === 'this-week') return isTaskDueThisWeek(task);
   if (horizon === 'overdue') {
     if (!task.dueDate) return false;
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalStr();
     return task.dueDate < today && task.status !== 'done';
   }
   return true;
