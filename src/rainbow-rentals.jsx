@@ -124,6 +124,7 @@ export default function RainbowRentals() {
   const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
   const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
+  const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
   const enableAlerts = async () => {
     const r = await requestPushToken();
     if (r.ok && user) {
@@ -456,6 +457,15 @@ export default function RainbowRentals() {
       rentUnsubscribe();
       expensesUnsubscribe();
     };
+  }, [user]);
+
+  // Bank-deposit reconcile slice written by the mikeslife bridge cron.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'rentalData', 'incomeActuals'),
+      (snap) => { if (snap.exists()) setIncomeActuals(snap.data()); },
+      (e) => console.error('incomeActuals load:', e));
+    return () => unsub();
   }, [user]);
 
   // ========== AUTO-CREATE RECURRING EXPENSES ==========
@@ -833,6 +843,7 @@ export default function RainbowRentals() {
                 <RentReconciliation
                   properties={properties}
                   rentPayments={rentPayments}
+                  incomeActuals={incomeActuals}
                   getEffectiveStatus={getEffectiveStatus}
                   onRecordRent={(prop, monthKey, cell) => {
                     const shortfall = cell && cell.state === 'short' ? (cell.expected - cell.received) : null;

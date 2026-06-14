@@ -16,10 +16,16 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const RENT_COLLECTING = ['occupied', 'lease-expired', 'month-to-month'];
 const GRACE_DAY = 5; // a payment dated after the 5th of its rent month counts as "late"
 
-export default function RentReconciliation({ properties, rentPayments, getEffectiveStatus, onRecordRent }) {
+export default function RentReconciliation({ properties, rentPayments, getEffectiveStatus, onRecordRent, incomeActuals }) {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonthIdx = now.getMonth(); // 0-based
+  const curKey = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+  const recordedThisMonth = rentPayments
+    .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.incomeType === 'rent' || !r.incomeType) && (r.datePaid || r.month || '').startsWith(curKey))
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const depositedThisMonth = (incomeActuals && incomeActuals.months && incomeActuals.months[curKey] && incomeActuals.months[curKey].total) || 0;
+  const reconDiff = depositedThisMonth - recordedThisMonth;
   const [year, setYear] = useState(currentYear);
 
   // Properties we expect to collect rent on (current status + positive monthly rent).
@@ -133,6 +139,19 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
             className="w-8 h-8 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 text-sm disabled:opacity-30">&rsaquo;</button>
         </div>
       </div>
+
+      {/* Bank-deposit reconcile (this month) — from mikesmoney via the Rupert bridge */}
+      {incomeActuals && (
+        <div className={`rounded-2xl border p-4 flex items-center justify-between ${Math.abs(reconDiff) < 1 ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/40 bg-amber-500/10'}`}>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-white/50">This month · bank reconcile</div>
+            <div className="text-sm text-white/85 mt-0.5">Recorded <b>{formatCurrency(recordedThisMonth)}</b> · Deposited <b>{formatCurrency(depositedThisMonth)}</b></div>
+          </div>
+          <div className={`text-sm font-bold ${Math.abs(reconDiff) < 1 ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {Math.abs(reconDiff) < 1 ? 'matched ✓' : `${reconDiff > 0 ? '+' : ''}${formatCurrency(reconDiff)}`}
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
