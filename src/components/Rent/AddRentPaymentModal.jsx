@@ -16,6 +16,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
     amount: '',
     datePaid: '',
     status: 'paid',
+    method: '',
     notes: '',
   });
 
@@ -32,6 +33,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
         amount: payment.amount ?? '',
         datePaid: payment.datePaid || todayLocalStr(),
         status: payment.status || 'paid',
+        method: payment.method || '',
         notes: payment.notes || '',
       });
     } else {
@@ -195,6 +197,27 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
                   >{s.label}</button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* How was rent paid? — only for rent */}
+          {isRentType && (
+            <div>
+              <label className="text-xs text-white/40 mb-1 block">How was it paid?</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['Avail', 'Zelle', 'Money order', 'Check', 'Cash', 'Other'].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setForm(f => ({ ...f, method: f.method === m ? '' : m }))}
+                    className={`px-2 py-2 rounded-xl text-xs font-medium transition border ${
+                      form.method === m
+                        ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
+                        : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
+                    }`}
+                  >{m}</button>
+                ))}
+              </div>
+              <p className="text-[11px] text-white/30 mt-1">How the tenant paid this month (helps reconcile against the bank).</p>
             </div>
           )}
 
