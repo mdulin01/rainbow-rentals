@@ -123,6 +123,7 @@ export default function RainbowRentals() {
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
   const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
   const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+  const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
   const enableAlerts = async () => {
     const r = await requestPushToken();
     if (r.ok && user) {
@@ -1429,7 +1430,7 @@ export default function RainbowRentals() {
                       try {
                         await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
                           week: weekId, by: currentUser || 'Liam', at,
-                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length },
+                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked },
                           mikeNotified: false, // push layer flips this when Mike is alerted
                         }, { merge: true });
                         showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
@@ -1465,6 +1466,27 @@ export default function RainbowRentals() {
                             className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">📝 Update a lease</button>
                           <button onClick={() => setShowAddExpenseModal('create')}
                             className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
+                        </div>
+
+                        {/* Action item: update rents in Avail */}
+                        <button onClick={() => setAvailChecked(v => !v)}
+                          className="w-full flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-left">
+                          <span className={`flex-shrink-0 w-5 h-5 rounded-md border flex items-center justify-center text-xs ${availChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-white/30 text-transparent'}`}>✓</span>
+                          <span className="text-sm text-white/85">🔑 Update rent payments in <b>Avail</b></span>
+                        </button>
+
+                        {/* This week's to-dos (shared tasks) */}
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">✅ This week's to-dos {pendingTasks.length > 0 && `(${pendingTasks.length})`}</div>
+                          {pendingTasks.length === 0 ? (
+                            <div className="text-sm text-white/50">No open to-dos.</div>
+                          ) : pendingTasks.slice(0, 8).map(t => (
+                            <div key={t.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                              <span className="text-sm text-white/85 min-w-0 truncate pr-2">{t.title}{t.dueDate ? <span className="text-white/40"> · due {t.dueDate}</span> : null}</span>
+                              <button onClick={() => completeTask(t.id)}
+                                className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-emerald-500/80 text-white text-xs font-semibold">Done</button>
+                            </div>
+                          ))}
                         </div>
 
                         {pushState !== 'granted' && (
