@@ -74,6 +74,7 @@ import BuildInfo from './components/BuildInfo';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { requestPushToken } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
 
@@ -121,6 +122,17 @@ export default function RainbowRentals() {
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
   const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
+  const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+  const enableAlerts = async () => {
+    const r = await requestPushToken();
+    if (r.ok && user) {
+      try {
+        await setDoc(doc(db, 'pushTokens', user.uid), { uid: user.uid, email: user.email || '', token: r.token, updatedAt: new Date().toISOString() }, { merge: true });
+        setPushState('granted');
+        showToast && showToast('Alerts on for this device 🔔', 'success');
+      } catch (e) { showToast && showToast('Token save failed: ' + e.message, 'error'); }
+    } else { showToast && showToast('Could not enable alerts: ' + (r.reason || 'error'), 'error'); }
+  };
 
   // Search
   const [showSearch, setShowSearch] = useState(false);
@@ -1455,6 +1467,9 @@ export default function RainbowRentals() {
                             className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
                         </div>
 
+                        {pushState !== 'granted' && (
+                          <button onClick={enableAlerts} className="w-full mb-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">🔔 Enable weekly reminders on this device</button>
+                        )}
                         {weeklySentAt
                           ? <div className="text-center text-sm text-emerald-400 font-semibold py-1">✓ Sent — Mike will be notified to pay you.</div>
                           : <button onClick={sendDone} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:opacity-90 text-white font-bold">✅ Done &amp; send</button>}
