@@ -7,7 +7,16 @@ export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 export const ownerEmails = [
   'mdulin@gmail.com',
   'dulinliam@gmail.com',
+  'adamjosephbritten@gmail.com', // property owner — restricted to Brookhurst (see propertyAccess)
 ];
+
+// Per-property owner access: email -> substring matched against a property's name/address.
+// A restricted owner sees ONLY their matching property across the whole app (UI filter on
+// the shared docs — convenient, not hard isolation). Emails NOT listed here are full managers
+// (Mike, Liam) who see and manage everything.
+export const propertyAccess = {
+  'adamjosephbritten@gmail.com': 'brookhurst',
+};
 
 // Property types
 export const propertyTypes = [

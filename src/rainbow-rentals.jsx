@@ -3,7 +3,7 @@ import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3
 
 // Constants and utilities
 import {
-  ownerEmails, propertyTypes, propertyColors, documentTypes,
+  ownerEmails, propertyAccess, propertyTypes, propertyColors, documentTypes,
   expenseCategories, incomeCategories, taskPriorities, timeHorizons,
   listCategories, ideaCategories, tenantStatuses, rentStatuses
 } from './constants';
@@ -154,7 +154,7 @@ export default function RainbowRentals() {
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
   const {
-    sharedTasks, sharedLists, sharedIdeas,
+    sharedTasks: _allTasks, sharedLists, sharedIdeas,
     addTask, updateTask, deleteTask, completeTask, highlightTask,
     addList, updateList, deleteList, addListItem, toggleListItem, deleteListItem, highlightList,
     addIdea, updateIdea, deleteIdea, highlightIdea,
@@ -169,7 +169,7 @@ export default function RainbowRentals() {
 
   const propertiesHook = useProperties(currentUser, savePropertiesRef.current, showToast);
   const {
-    properties, setProperties,
+    properties: _allProperties, setProperties,
     selectedProperty, setSelectedProperty,
     propertyViewMode, setPropertyViewMode,
     showNewPropertyModal, setShowNewPropertyModal,
@@ -179,7 +179,7 @@ export default function RainbowRentals() {
 
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
   const {
-    documents, setDocuments,
+    documents: _allDocuments, setDocuments,
     documentViewMode, setDocumentViewMode,
     documentTypeFilter, setDocumentTypeFilter,
     documentPropertyFilter, setDocumentPropertyFilter,
@@ -189,7 +189,7 @@ export default function RainbowRentals() {
 
   const financialsHook = useFinancials(currentUser, saveFinancialsRef.current, showToast);
   const {
-    transactions, setTransactions,
+    transactions: _allTxns, setTransactions,
     financialViewMode, setFinancialViewMode,
     transactionTypeFilter, setTransactionTypeFilter,
     transactionPropertyFilter, setTransactionPropertyFilter,
@@ -200,7 +200,7 @@ export default function RainbowRentals() {
 
   const rentHook = useRent(currentUser, saveRentRef.current, showToast);
   const {
-    rentPayments, setRentPayments,
+    rentPayments: _allRent, setRentPayments,
     showAddRentModal, setShowAddRentModal,
     addRentPayment, updateRentPayment, deleteRentPayment,
   } = rentHook;
@@ -208,10 +208,25 @@ export default function RainbowRentals() {
   // Pass db directly — hook saves to Firestore internally, no ref indirection
   const expensesHook = useExpenses(db, currentUser, showToast);
   const {
-    expenses, setExpenses,
+    expenses: _allExpenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
     addExpense, updateExpense, deleteExpense,
   } = expensesHook;
+
+  // ---- Per-property owner access (e.g. Adam → only Brookhurst). Single choke-point:
+  // every downstream `properties/rentPayments/expenses/documents/transactions/sharedTasks`
+  // is the filtered view for a restricted owner; full managers (no match) see everything. ----
+  const _accessMatch = propertyAccess[(user?.email || '').toLowerCase()];
+  const canManage = !_accessMatch; // Mike/Liam can edit rents/leases/expenses; restricted owners can't
+  const _match = (p) => `${p.name || ''} ${p.address || ''}`.toLowerCase().includes(_accessMatch);
+  const properties = _accessMatch ? _allProperties.filter(_match) : _allProperties;
+  const _visibleIds = new Set(properties.map((p) => String(p.id)));
+  const _inScope = (pid) => _visibleIds.has(String(pid));
+  const rentPayments = _accessMatch ? _allRent.filter((r) => _inScope(r.propertyId)) : _allRent;
+  const expenses = _accessMatch ? _allExpenses.filter((e) => _inScope(e.propertyId)) : _allExpenses;
+  const documents = _accessMatch ? _allDocuments.filter((d) => _inScope(d.propertyId)) : _allDocuments;
+  const transactions = _accessMatch ? _allTxns.filter((t) => _inScope(t.propertyId)) : _allTxns;
+  const sharedTasks = _accessMatch ? _allTasks.filter((t) => _inScope(t.linkedTo?.propertyId)) : _allTasks;
 
   // Property financial breakdown modal
   const [showPropertyBreakdown, setShowPropertyBreakdown] = useState(false);
@@ -1411,8 +1426,8 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
-                  {/* ---- Liam's weekly update card ---- */}
-                  {(() => {
+                  {/* ---- Liam's weekly update card (managers only) ---- */}
+                  {canManage && (() => {
                     const now = new Date();
                     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
