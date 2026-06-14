@@ -120,6 +120,7 @@ export default function RainbowRentals() {
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
+  const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
 
   // Search
   const [showSearch, setShowSearch] = useState(false);
@@ -1385,6 +1386,81 @@ export default function RainbowRentals() {
               {activeSection === 'action-items' && (
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
+
+                  {/* ---- Liam's weekly update card ---- */}
+                  {(() => {
+                    const now = new Date();
+                    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    // ISO week label
+                    const dt = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+                    const dayNum = (dt.getUTCDay() + 6) % 7; dt.setUTCDate(dt.getUTCDate() - dayNum + 3);
+                    const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+                    const weekNo = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+                    const weekId = `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+
+                    const rentedProps = properties.filter(p =>
+                      ['occupied', 'lease-expired', 'month-to-month'].includes(
+                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
+                      )
+                    );
+                    const paidPropIds = new Set(
+                      rentPayments
+                        .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentMonth))
+                        .map(r => String(r.propertyId))
+                    );
+                    const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
+
+                    const sendDone = async () => {
+                      const at = new Date().toISOString();
+                      setWeeklySentAt(at);
+                      try {
+                        await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
+                          week: weekId, by: currentUser || 'Liam', at,
+                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length },
+                          mikeNotified: false, // push layer flips this when Mike is alerted
+                        }, { merge: true });
+                        showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
+                      } catch (e) { showToast && showToast('Saved locally — sync issue: ' + e.message, 'error'); }
+                    };
+
+                    return (
+                      <div className="mb-6 rounded-2xl border border-indigo-400/30 bg-gradient-to-br from-indigo-500/15 to-purple-500/10 p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="text-white font-bold">🗓️ This week's update</h3>
+                          <span className="text-xs text-white/50">{weekId}</span>
+                        </div>
+                        <p className="text-sm text-white/60 mb-3">Record rents, any lease changes, and expenses — then tap <b>Done &amp; send</b>.</p>
+
+                        {/* Rents to record */}
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">💰 Rents to record {unpaidProps.length > 0 && `(${unpaidProps.length})`}</div>
+                          {unpaidProps.length === 0 ? (
+                            <div className="text-sm text-emerald-400/90">All rents recorded for {now.toLocaleString('en-US', { month: 'long' })} ✓</div>
+                          ) : unpaidProps.map(p => (
+                            <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                              <span className="text-sm text-white/85">{p.emoji || '🏠'} {p.name} <span className="text-white/45">· {formatCurrency(parseFloat(p.monthlyRent) || 0)}</span></span>
+                              <button
+                                onClick={() => setShowAddRentModal({ propertyId: p.id, propertyName: p.name, amount: parseFloat(p.monthlyRent) || '', month: currentMonth, datePaid: todayStr, status: 'paid', incomeType: 'rent' })}
+                                className="px-3 py-1 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold">Record</button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Lease + expense quick actions */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <button onClick={() => setShowTenantModal({ _pickProperty: true })}
+                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">📝 Update a lease</button>
+                          <button onClick={() => setShowAddExpenseModal('create')}
+                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
+                        </div>
+
+                        {weeklySentAt
+                          ? <div className="text-center text-sm text-emerald-400 font-semibold py-1">✓ Sent — Mike will be notified to pay you.</div>
+                          : <button onClick={sendDone} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:opacity-90 text-white font-bold">✅ Done &amp; send</button>}
+                      </div>
+                    );
+                  })()}
 
                   {/* Rents Due / Past Due */}
                   {(() => {
