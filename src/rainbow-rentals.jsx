@@ -154,7 +154,7 @@ export default function RainbowRentals() {
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
   const {
-    sharedTasks: _allTasks, sharedLists, sharedIdeas,
+    sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
     addTask, updateTask, deleteTask, completeTask, highlightTask,
     addList, updateList, deleteList, addListItem, toggleListItem, deleteListItem, highlightList,
     addIdea, updateIdea, deleteIdea, highlightIdea,
@@ -227,6 +227,7 @@ export default function RainbowRentals() {
   const documents = _accessMatch ? _allDocuments.filter((d) => _inScope(d.propertyId)) : _allDocuments;
   const transactions = _accessMatch ? _allTxns.filter((t) => _inScope(t.propertyId)) : _allTxns;
   const sharedTasks = _accessMatch ? _allTasks.filter((t) => _inScope(t.linkedTo?.propertyId)) : _allTasks;
+  const sharedLists = _accessMatch ? _allLists.filter((l) => _inScope(l.linkedTo?.itemId)) : _allLists;
 
   // Property financial breakdown modal
   const [showPropertyBreakdown, setShowPropertyBreakdown] = useState(false);
