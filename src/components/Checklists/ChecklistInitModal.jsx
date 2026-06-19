@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, ChevronRight, Home } from 'lucide-react';
-import { MOVE_IN_TEMPLATE_ITEMS, MOVE_OUT_TEMPLATE_ITEMS } from '../../constants';
+import { MOVE_IN_TEMPLATE_ITEMS, MOVE_OUT_TEMPLATE_ITEMS, LEASING_TEMPLATE_ITEMS } from '../../constants';
 
 const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUser, initialType }) => {
   // If initialType is provided, skip straight to property selection
@@ -8,7 +8,13 @@ const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUse
   const [checklistType, setChecklistType] = useState(initialType || null); // 'move-in' | 'move-out'
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
 
-  const templateItems = checklistType === 'move-in' ? MOVE_IN_TEMPLATE_ITEMS : MOVE_OUT_TEMPLATE_ITEMS;
+  const TYPE_META = {
+    'move-in': { label: 'Move-In', emoji: '📋', items: MOVE_IN_TEMPLATE_ITEMS },
+    'move-out': { label: 'Move-Out', emoji: '📦', items: MOVE_OUT_TEMPLATE_ITEMS },
+    'leasing': { label: 'Leasing / Rent-Up', emoji: '🏷️', items: LEASING_TEMPLATE_ITEMS },
+  };
+  const meta = TYPE_META[checklistType] || TYPE_META['move-in'];
+  const templateItems = meta.items;
 
   const handleCreate = () => {
     if (!checklistType || !selectedPropertyId) return;
@@ -18,8 +24,8 @@ const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUse
 
     const newChecklist = {
       id: Date.now(),
-      name: `${checklistType === 'move-in' ? 'Move-In' : 'Move-Out'} — ${property.name}`,
-      emoji: checklistType === 'move-in' ? '📋' : '📦',
+      name: `${meta.label} — ${property.name}`,
+      emoji: meta.emoji,
       category: checklistType,
       linkedTo: { section: 'property', itemId: String(property.id) },
       items: templateItems.map((t, idx) => ({
@@ -87,6 +93,17 @@ const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUse
                 </div>
                 <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-teal-400 transition" />
               </button>
+
+              {/* Leasing / Rent-Up option */}
+              <button onClick={() => { setChecklistType('leasing'); setStep(2); }}
+                className="w-full flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-teal-500/30 transition text-left group">
+                <span className="text-3xl">🏷️</span>
+                <div className="flex-1">
+                  <div className="text-base font-semibold text-white">Leasing / Rent-Up</div>
+                  <div className="text-xs text-white/40 mt-0.5">{LEASING_TEMPLATE_ITEMS.length} items — paint, photos, list, show, screen, lease...</div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-teal-400 transition" />
+              </button>
             </div>
           )}
 
@@ -102,9 +119,9 @@ const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUse
 
               {/* Type badge */}
               <div className="flex items-center gap-2 px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl">
-                <span className="text-lg">{checklistType === 'move-in' ? '📋' : '📦'}</span>
+                <span className="text-lg">{meta.emoji}</span>
                 <span className="text-sm font-medium text-teal-400">
-                  {checklistType === 'move-in' ? 'Move-In' : 'Move-Out'} Checklist
+                  {meta.label} Checklist
                 </span>
                 <span className="text-xs text-white/30 ml-auto">{templateItems.length} items</span>
               </div>

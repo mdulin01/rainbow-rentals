@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Check, Plus, Trash2, Camera, ChevronDown, ChevronUp, PenTool } from 'lucide-react';
+import { X, Check, Plus, Trash2, Camera, ChevronDown, ChevronUp, PenTool, Archive } from 'lucide-react';
 import SignaturePad from './SignaturePad';
 
 const ChecklistDetailModal = ({
@@ -17,6 +17,7 @@ const ChecklistDetailModal = ({
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [uploadingItemId, setUploadingItemId] = useState(null);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const inputRef = useRef(null);
   const photoInputRefs = useRef({});
 
@@ -71,6 +72,12 @@ const ChecklistDetailModal = ({
     setUploadingItemId(null);
   };
 
+  const isArchived = checklist.status === 'archived';
+  const toggleArchive = () => {
+    onUpdateChecklist(checklist.id, { status: isArchived ? 'active' : 'archived' });
+    onClose();
+  };
+
   const handleSignature = (dataUrl, signerName) => {
     onUpdateChecklist(checklist.id, {
       signature: {
@@ -99,9 +106,23 @@ const ChecklistDetailModal = ({
                 )}
               </div>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/50 hover:text-white shrink-0">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {confirmArchive ? (
+                <button onClick={toggleArchive}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 text-xs font-semibold hover:bg-amber-500/30 transition">
+                  {isArchived ? 'Confirm unarchive' : 'Confirm archive'}
+                </button>
+              ) : (
+                <button onClick={() => setConfirmArchive(true)}
+                  title={isArchived ? 'Unarchive' : 'Archive'}
+                  className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/40 hover:text-white">
+                  <Archive className="w-4.5 h-4.5" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/50 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Progress bar */}

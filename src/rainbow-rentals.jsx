@@ -1212,7 +1212,7 @@ export default function RainbowRentals() {
                   {/* Quick link to Action Items if there are pending tasks or active checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
                     );
                     const pendingCount = sharedTasks.filter(t => t.status !== 'done').length;
                     const checklistCount = activeChecklists.length;
@@ -1711,16 +1711,16 @@ export default function RainbowRentals() {
                   {/* Active Move-In/Move-Out Checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
                     );
                     return (
                       <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Checklists</h3>
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Properties</h3>
                           <button onClick={() => setShowChecklistInitModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ New</button>
                         </div>
                         {activeChecklists.length === 0 ? (
-                          <p className="text-center text-white/30 py-6">No active checklists</p>
+                          <p className="text-center text-white/30 py-6">No active properties</p>
                         ) : (
                           <div className="space-y-2">
                             {activeChecklists.map(list => {

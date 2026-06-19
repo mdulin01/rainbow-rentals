@@ -180,6 +180,25 @@ export const MOVE_OUT_TEMPLATE_ITEMS = [
   { text: 'Listing updated (if re-renting)', icon: '📢' },
 ];
 
+export const LEASING_TEMPLATE_ITEMS = [
+  { text: 'Final make-ready repairs completed', icon: '🔧' },
+  { text: 'Interior painted / touched up', icon: '🎨' },
+  { text: 'Deep clean (incl. carpets)', icon: '🧹' },
+  { text: 'Landscaping / curb appeal tidied', icon: '🌿' },
+  { text: 'New listing photos taken', icon: '📸' },
+  { text: 'Listing description written', icon: '📝' },
+  { text: 'Rent price set', icon: '🏷️' },
+  { text: 'Listed on Avail', icon: '📣' },
+  { text: 'Listed on Zillow / Apartments.com', icon: '🌐' },
+  { text: 'Posted to Facebook Marketplace / groups', icon: '📱' },
+  { text: 'Yard / window sign posted', icon: '🪧' },
+  { text: 'Showings scheduled', icon: '📅' },
+  { text: 'Applicants screened (credit / background)', icon: '🔍' },
+  { text: 'Application & lease sent', icon: '📄' },
+  { text: 'Lease signed + deposit collected', icon: '✍️' },
+  { text: 'Move-in scheduled / keys ready', icon: '🔑' },
+];
+
 // Idea categories
 export const ideaCategories = [
   { value: 'improvement', label: 'Property Improvement', emoji: '🏗️' },
