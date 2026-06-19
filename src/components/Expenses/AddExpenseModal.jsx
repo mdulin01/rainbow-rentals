@@ -20,6 +20,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
     recurring: false,
     recurringFrequency: 'monthly',
     dueDay: '',
+    paidWith: 'cash',
     // Mileage-specific fields
     miles: '',
     tripFrom: '',
@@ -45,6 +46,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
         recurring: expense.recurring || false,
         recurringFrequency: expense.recurringFrequency || 'monthly',
         dueDay: expense.dueDay || '',
+        paidWith: expense.paidWith || 'cash',
         miles: expense.miles || '',
         tripFrom: expense.tripFrom || '',
         tripTo: expense.tripTo || '',
@@ -193,6 +195,7 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
     onSave({
       ...form,
       amount: parseFloat(form.amount) || 0,
+      paidWith: isMileage ? 'mileage' : form.paidWith,
       miles: isMileage ? parseFloat(form.miles) || 0 : undefined,
       tripFrom: isMileage ? form.tripFrom : undefined,
       tripTo: isMileage ? form.tripTo : undefined,
@@ -443,6 +446,27 @@ export default function AddExpenseModal({ expense, properties, onSave, onDelete,
                   placeholder="e.g., Home Depot, Plumber Co."
                   className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50"
                 />
+              </div>
+
+              {/* Paid with */}
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Paid with</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { v: 'cash', l: '💵 Cash / personal' },
+                    { v: 'citi', l: '💳 Citi •4793' },
+                    { v: 'other', l: '🏦 Other card' },
+                  ].map(o => (
+                    <button key={o.v} type="button"
+                      onClick={() => setForm(f => ({ ...f, paidWith: o.v }))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition border ${
+                        form.paidWith === o.v
+                          ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                          : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
+                      }`}>{o.l}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-white/35 mt-1">Citi •4793 charges usually appear automatically to confirm — use this only for cash, mileage, or other-card expenses.</p>
               </div>
 
               {/* Receipt Photo */}

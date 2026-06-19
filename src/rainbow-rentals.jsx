@@ -47,6 +47,7 @@ import RentReconciliation from './components/Rent/RentReconciliation';
 // Expenses components
 import ExpensesList from './components/Expenses/ExpensesList';
 import AddExpenseModal from './components/Expenses/AddExpenseModal';
+import CardInbox from './components/Expenses/CardInbox';
 
 // Documents components
 import DocumentCard from './components/Documents/DocumentCard';
@@ -73,7 +74,7 @@ import BuildInfo from './components/BuildInfo';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
 import { requestPushToken } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
@@ -125,6 +126,9 @@ export default function RainbowRentals() {
   const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
   const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
+  const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
+  const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
+  const [dashboardReportYear, setDashboardReportYear] = useState(new Date().getFullYear());
   const enableAlerts = async () => {
     const r = await requestPushToken();
     if (r.ok && user) {
@@ -483,6 +487,41 @@ export default function RainbowRentals() {
       (e) => console.error('incomeActuals load:', e));
     return () => unsub();
   }, [user]);
+
+  // Citi •4793 confirm-inbox slice written by the mikeslife bridge cron.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'rentalData', 'cardInbox'),
+      (snap) => { if (snap.exists()) setCardInbox(snap.data()); },
+      (e) => console.error('cardInbox load:', e));
+    return () => unsub();
+  }, [user]);
+
+  // Liam confirms a card charge → create a linked expense (the bridge tags the
+  // mikesmoney txn on its next run; moneyTxnId prevents a duplicate).
+  const confirmCardCharge = async (item, { propertyId, propertyName, category, reason }) => {
+    addExpense({
+      propertyId: propertyId || '',
+      propertyName: propertyName || '',
+      category: category || 'maintenance',
+      description: reason || item.merchant || 'Card expense',
+      amount: item.amount,
+      date: item.date,
+      vendor: item.merchant || '',
+      notes: '',
+      receiptPhoto: '',
+      paidWith: 'citi',
+      source: 'citi-4793',
+      moneyTxnId: item.txnId,
+      moneyMatch: 'matched',
+    });
+    setHandledInboxIds((prev) => [...prev, item.txnId]);
+  };
+  const dismissCardCharge = async (item) => {
+    setHandledInboxIds((prev) => [...prev, item.txnId]);
+    try { await setDoc(doc(db, 'rentalData', 'cardInbox'), { dismissed: arrayUnion(item.txnId) }, { merge: true }); }
+    catch (e) { showToast && showToast('Could not dismiss: ' + e.message, 'error'); }
+  };
 
   // ========== AUTO-CREATE RECURRING EXPENSES ==========
   // Uses a Firestore TRANSACTION to atomically read-modify-write.
@@ -885,18 +924,20 @@ export default function RainbowRentals() {
                     const now = new Date();
                     const currentYear = now.getFullYear();
                     const currentMonthIdx = now.getMonth(); // 0-based
+                    const reportYear = dashboardReportYear;
+                    const isCurrentYear = reportYear === currentYear;
                     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
                     // State-like behavior using a data attribute on the container
                     // We'll use a simple approach: store selected month in a ref-like pattern
-                    const reportMonth = dashboardReportMonth ?? currentMonthIdx; // null = current month, 12 = YTD
+                    const reportMonth = dashboardReportMonth ?? (isCurrentYear ? currentMonthIdx : 12); // null = current month, 12 = YTD/full year
                     const isYTD = reportMonth === 12;
-                    const selectedMonthLabel = isYTD ? `${currentYear} Year-to-Date` : `${monthNames[reportMonth]} ${currentYear}`;
+                    const selectedMonthLabel = isYTD ? (isCurrentYear ? `${reportYear} Year-to-Date` : `${reportYear} Full Year`) : `${monthNames[reportMonth]} ${reportYear}`;
 
                     // Build prefix filter for date matching
                     const getDateFilter = (monthIdx) => {
-                      if (monthIdx === 12) return String(currentYear); // YTD
-                      return `${currentYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+                      if (monthIdx === 12) return String(reportYear); // YTD / full year
+                      return `${reportYear}-${String(monthIdx + 1).padStart(2, '0')}`;
                     };
                     const datePrefix = getDateFilter(reportMonth);
 
@@ -967,12 +1008,24 @@ export default function RainbowRentals() {
                     const fmtShort = (v) => v === 0 ? '—' : formatCurrency(v);
 
                     return (
-                      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
+                      <div id="pnl-print" className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
                         {/* Header */}
-                        <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                           <h3 className="text-base font-bold text-white">
-                            Monthly Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
+                            P&amp;L Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
                           </h3>
+                          <div className="flex items-center gap-2 no-print">
+                            <div className="flex items-center gap-1 bg-white/[0.06] rounded-lg px-1 py-0.5">
+                              <button onClick={() => setDashboardReportYear((y) => Math.max(2020, y - 1))}
+                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm">‹</button>
+                              <span className="text-sm font-semibold text-white px-1 tabular-nums">{reportYear}</span>
+                              <button onClick={() => setDashboardReportYear((y) => Math.min(currentYear, y + 1))}
+                                disabled={reportYear >= currentYear}
+                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm disabled:opacity-30">›</button>
+                            </div>
+                            <button onClick={() => window.print()}
+                              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold">🖨 Print / PDF</button>
+                          </div>
                         </div>
 
                         {/* Month tabs */}
@@ -983,7 +1036,7 @@ export default function RainbowRentals() {
                               className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${
                                 reportMonth === idx
                                   ? 'bg-amber-500 text-slate-900'
-                                  : idx <= currentMonthIdx
+                                  : (!isCurrentYear || idx <= currentMonthIdx)
                                     ? 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12]'
                                     : 'bg-white/[0.03] text-white/25'
                               }`}
@@ -1427,6 +1480,16 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
+                  {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
+                  {canManage && (
+                    <CardInbox
+                      items={(cardInbox?.items || []).filter((it) => !handledInboxIds.includes(it.txnId))}
+                      properties={properties}
+                      onConfirm={confirmCardCharge}
+                      onDismiss={dismissCardCharge}
+                    />
+                  )}
+
                   {/* ---- Liam's weekly update card (managers only) ---- */}
                   {canManage && (() => {
                     const now = new Date();
@@ -1460,6 +1523,8 @@ export default function RainbowRentals() {
                           counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked },
                           mikeNotified: false, // push layer flips this when Mike is alerted
                         }, { merge: true });
+                        // Ping Mike instantly via mikeslife (his real push token); the daily cron is a backstop.
+                        try { fetch('https://mikeslife.app/api/liam-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {}); } catch (_) { /* best effort */ }
                         showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
                       } catch (e) { showToast && showToast('Saved locally — sync issue: ' + e.message, 'error'); }
                     };

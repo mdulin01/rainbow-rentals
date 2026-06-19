@@ -34,3 +34,14 @@ body {
 .mono-nums, .font-mono { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60;
   background: linear-gradient(90deg,#e40303,#ff8c00,#ffd700,#008026,#3b82f6,#732982); opacity: .7; }
+
+/* ===== P&L report print / save-as-PDF ===== */
+@media print {
+  body * { visibility: hidden !important; }
+  #pnl-print, #pnl-print * { visibility: visible !important; }
+  #pnl-print { position: absolute !important; left: 0; top: 0; width: 100%; padding: 0 !important; margin: 0 !important; border: none !important; }
+  #pnl-print, #pnl-print * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+  #pnl-print table { width: 100%; border-collapse: collapse; }
+  #pnl-print th, #pnl-print td { border-bottom: 1px solid #ccc; }
+  .no-print { display: none !important; }
+}
