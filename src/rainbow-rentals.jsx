@@ -499,6 +499,14 @@ export default function RainbowRentals() {
 
   // Liam confirms a card charge → create a linked expense (the bridge tags the
   // mikesmoney txn on its next run; moneyTxnId prevents a duplicate).
+  // Durably drop a charge from the inbox doc so it doesn't reappear on reload
+  // before the next bridge run (which also reconciles via expense links / dismissed).
+  const removeInboxItem = async (txnId, extra = {}) => {
+    setHandledInboxIds((prev) => [...prev, txnId]);
+    const remaining = (cardInbox?.items || []).filter((it) => it.txnId !== txnId);
+    try { await setDoc(doc(db, 'rentalData', 'cardInbox'), { items: remaining, ...extra }, { merge: true }); }
+    catch (e) { showToast && showToast('Sync issue: ' + e.message, 'error'); }
+  };
   const confirmCardCharge = async (item, { propertyId, propertyName, category, reason }) => {
     addExpense({
       propertyId: propertyId || '',
@@ -515,12 +523,10 @@ export default function RainbowRentals() {
       moneyTxnId: item.txnId,
       moneyMatch: 'matched',
     });
-    setHandledInboxIds((prev) => [...prev, item.txnId]);
+    await removeInboxItem(item.txnId);
   };
   const dismissCardCharge = async (item) => {
-    setHandledInboxIds((prev) => [...prev, item.txnId]);
-    try { await setDoc(doc(db, 'rentalData', 'cardInbox'), { dismissed: arrayUnion(item.txnId) }, { merge: true }); }
-    catch (e) { showToast && showToast('Could not dismiss: ' + e.message, 'error'); }
+    await removeInboxItem(item.txnId, { dismissed: arrayUnion(item.txnId) });
   };
 
   // ========== AUTO-CREATE RECURRING EXPENSES ==========
