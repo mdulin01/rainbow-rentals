@@ -2473,39 +2473,6 @@ export default function RainbowRentals() {
         {/* Mobile Bottom Navigation with FAB */}
         {!anyModalOpen && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[100]" style={{ transform: 'translateZ(0)' }}>
-            {/* FAB Menu Popup */}
-            {showAddNewMenu && isOwner && (
-              <>
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99]" onClick={() => setShowAddNewMenu(false)} />
-                <div className="fixed right-4 z-[101] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
-                  style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 132px)', animation: 'fabGridUp 0.2s cubic-bezier(0.16,1,0.3,1) both', transformOrigin: 'bottom right' }}>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
-                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Income', gradient: 'from-emerald-400 to-green-500' },
-                      { action: () => setShowAddExpenseModal('create'), icon: '💸', label: 'Expense', gradient: 'from-red-400 to-rose-500' },
-                      { action: () => setShowSharedListModal('create'), icon: '📝', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
-                    ].map((item, idx) => {
-                      const row = Math.floor(idx / 2);
-                      const delay = (1 - row) * 0.04 + (idx % 2) * 0.015;
-                      return (
-                        <button key={item.label} onClick={() => { setShowAddNewMenu(false); item.action(); }}
-                          className="flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl hover:bg-white/10 transition active:scale-95"
-                          style={{ animation: `fabItemUp 0.25s cubic-bezier(0.16,1,0.3,1) ${delay}s both` }}>
-                          <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-xl shadow-md`}>{item.icon}</span>
-                          <span className="text-[11px] text-white/70 font-medium leading-tight">{item.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <style>{`
-                  @keyframes fabGridUp { from { opacity: 0; transform: translateX(-50%) scaleY(0.3) scaleX(0.8) translateY(20px); } to { opacity: 1; transform: translateX(-50%) scaleY(1) scaleX(1) translateY(0); } }
-                  @keyframes fabItemUp { from { opacity: 0; transform: translateY(12px) scale(0.7); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                `}</style>
-              </>
-            )}
-
             {/* Nav bar */}
             <div className="relative mx-auto w-fit max-w-[97vw] bg-slate-900/80 backdrop-blur-xl border border-slate-600/40 rounded-full shadow-2xl" style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
               {/* Tab buttons — all sections, floating dock */}
@@ -2517,6 +2484,7 @@ export default function RainbowRentals() {
                   { id: 'rent', label: 'Income', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
                   { id: 'expenses', label: 'Costs', emoji: '💸', gradient: 'from-red-400 to-rose-500' },
                   { id: 'dashboard', label: 'Home', emoji: '📊', gradient: 'from-purple-500 to-violet-500' },
+                  { id: 'ownership', label: 'Own', emoji: '🤝', gradient: 'from-amber-400 to-yellow-500' },
                   { id: 'documents', label: 'Docs', emoji: '📄', gradient: 'from-amber-400 to-orange-500' },
                 ].map((section) => (
                   <button
@@ -2542,23 +2510,6 @@ export default function RainbowRentals() {
               </div>
             </div>
 
-            {/* FAB — floating above bottom nav on right side */}
-            {isOwner && (
-              <button
-                onClick={() => setShowAddNewMenu(!showAddNewMenu)}
-                className={`fixed right-4 z-[101] rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 ${
-                  showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600'
-                }`}
-                style={{
-                  bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
-                  width: '3rem', height: '3rem',
-                  boxShadow: showAddNewMenu
-                    ? '0 4px 24px rgba(236,72,153,0.6)'
-                    : '0 4px 24px rgba(139,92,246,0.6)',
-                }}>
-                <Plus className="w-5 h-5 text-white transition-transform duration-200" />
-              </button>
-            )}
           </nav>
         )}
 
