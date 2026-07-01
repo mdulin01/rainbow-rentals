@@ -2430,46 +2430,6 @@ export default function RainbowRentals() {
           </div>
         )}
 
-        {/* Desktop FAB */}
-        {isOwner && !anyModalOpen && (
-          <div className="hidden md:block fixed top-24 left-6 z-[90]">
-            {showAddNewMenu && (
-              <>
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[89]" onClick={() => setShowAddNewMenu(false)} />
-                <div className="absolute top-16 left-0 z-[91] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
-                  style={{ animation: 'fabGridIn 0.15s ease-out both' }}>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
-                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Income', gradient: 'from-emerald-400 to-green-500' },
-                      { action: () => setShowAddExpenseModal('create'), icon: '💸', label: 'Expense', gradient: 'from-red-400 to-rose-500' },
-                      { action: () => setShowSharedListModal('create'), icon: '📝', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
-                    ].map((item, idx) => (
-                      <button key={item.label} onClick={() => { setShowAddNewMenu(false); item.action(); }}
-                        className="flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl hover:bg-white/10 transition active:scale-95"
-                        style={{ animation: `fabItemIn 0.12s ease-out ${idx * 0.02}s both` }}>
-                        <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-xl shadow-md`}>{item.icon}</span>
-                        <span className="text-[11px] text-white/70 font-medium leading-tight">{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <style>{`
-                  @keyframes fabGridIn { from { opacity: 0; transform: scale(0.9) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-                  @keyframes fabItemIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
-                `}</style>
-              </>
-            )}
-            <button onClick={() => setShowAddNewMenu(!showAddNewMenu)}
-              className={`w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all duration-200 active:scale-90 ${
-                showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600 hover:shadow-purple-500/30'
-              }`}
-              style={{ boxShadow: showAddNewMenu ? '0 8px 32px rgba(236,72,153,0.4)' : '0 8px 32px rgba(139,92,246,0.4)' }}>
-              <Plus className="w-6 h-6 text-white transition-transform duration-200" />
-            </button>
-          </div>
-        )}
-
         {/* Mobile Bottom Navigation with FAB */}
         {!anyModalOpen && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[100]" style={{ transform: 'translateZ(0)' }}>
