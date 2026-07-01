@@ -3,17 +3,18 @@ import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3
 
 // Constants and utilities
 import {
-  ownerEmails, propertyTypes, propertyColors, documentTypes,
+  ownerEmails, propertyAccess, propertyTypes, propertyColors, documentTypes,
   expenseCategories, incomeCategories, taskPriorities, timeHorizons,
   listCategories, ideaCategories, tenantStatuses, rentStatuses
 } from './constants';
 import {
   formatDate, formatCurrency, validateFileSize, isHeicFile, getSafeFileName,
-  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus
+  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus, todayLocalStr
 } from './utils';
 
 // Components
 import LoginScreen from './components/LoginScreen';
+import RupertBanner from './components/RupertBanner';
 import ConfirmDialog from './components/ConfirmDialog';
 
 // Hub components (tasks still used on Dashboard)
@@ -50,6 +51,7 @@ import RentReconciliation from './components/Rent/RentReconciliation';
 // Expenses components
 import ExpensesList from './components/Expenses/ExpensesList';
 import AddExpenseModal from './components/Expenses/AddExpenseModal';
+import CardInbox from './components/Expenses/CardInbox';
 
 // Documents components
 import DocumentCard from './components/Documents/DocumentCard';
@@ -77,7 +79,8 @@ import BuildInfo from './components/BuildInfo';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
+import { requestPushToken } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
 
@@ -124,6 +127,23 @@ export default function RainbowRentals() {
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
+  const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
+  const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+  const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
+  const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
+  const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
+  const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
+  const [dashboardReportYear, setDashboardReportYear] = useState(new Date().getFullYear());
+  const enableAlerts = async () => {
+    const r = await requestPushToken();
+    if (r.ok && user) {
+      try {
+        await setDoc(doc(db, 'pushTokens', user.uid), { uid: user.uid, email: user.email || '', token: r.token, updatedAt: new Date().toISOString() }, { merge: true });
+        setPushState('granted');
+        showToast && showToast('Alerts on for this device 🔔', 'success');
+      } catch (e) { showToast && showToast('Token save failed: ' + e.message, 'error'); }
+    } else { showToast && showToast('Could not enable alerts: ' + (r.reason || 'error'), 'error'); }
+  };
 
   // Search
   const [showSearch, setShowSearch] = useState(false);
@@ -144,7 +164,7 @@ export default function RainbowRentals() {
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
   const {
-    sharedTasks, sharedLists, sharedIdeas,
+    sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
     addTask, updateTask, deleteTask, completeTask, highlightTask,
     addList, updateList, deleteList, addListItem, toggleListItem, deleteListItem, highlightList,
     addIdea, updateIdea, deleteIdea, highlightIdea,
@@ -159,7 +179,7 @@ export default function RainbowRentals() {
 
   const propertiesHook = useProperties(currentUser, savePropertiesRef.current, showToast);
   const {
-    properties, setProperties,
+    properties: _allProperties, setProperties,
     selectedProperty, setSelectedProperty,
     propertyViewMode, setPropertyViewMode,
     showNewPropertyModal, setShowNewPropertyModal,
@@ -169,7 +189,7 @@ export default function RainbowRentals() {
 
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
   const {
-    documents, setDocuments,
+    documents: _allDocuments, setDocuments,
     documentViewMode, setDocumentViewMode,
     documentTypeFilter, setDocumentTypeFilter,
     documentPropertyFilter, setDocumentPropertyFilter,
@@ -179,7 +199,7 @@ export default function RainbowRentals() {
 
   const financialsHook = useFinancials(currentUser, saveFinancialsRef.current, showToast);
   const {
-    transactions, setTransactions,
+    transactions: _allTxns, setTransactions,
     financialViewMode, setFinancialViewMode,
     transactionTypeFilter, setTransactionTypeFilter,
     transactionPropertyFilter, setTransactionPropertyFilter,
@@ -190,7 +210,7 @@ export default function RainbowRentals() {
 
   const rentHook = useRent(currentUser, saveRentRef.current, showToast);
   const {
-    rentPayments, setRentPayments,
+    rentPayments: _allRent, setRentPayments,
     showAddRentModal, setShowAddRentModal,
     addRentPayment, updateRentPayment, deleteRentPayment,
   } = rentHook;
@@ -198,10 +218,26 @@ export default function RainbowRentals() {
   // Pass db directly — hook saves to Firestore internally, no ref indirection
   const expensesHook = useExpenses(db, currentUser, showToast);
   const {
-    expenses, setExpenses,
+    expenses: _allExpenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
     addExpense, updateExpense, deleteExpense,
   } = expensesHook;
+
+  // ---- Per-property owner access (e.g. Adam → only Brookhurst). Single choke-point:
+  // every downstream `properties/rentPayments/expenses/documents/transactions/sharedTasks`
+  // is the filtered view for a restricted owner; full managers (no match) see everything. ----
+  const _accessMatch = propertyAccess[(user?.email || '').toLowerCase()];
+  const canManage = !_accessMatch; // Mike/Liam can edit rents/leases/expenses; restricted owners can't
+  const _match = (p) => `${p.name || ''} ${p.address || ''}`.toLowerCase().includes(_accessMatch);
+  const properties = _accessMatch ? _allProperties.filter(_match) : _allProperties;
+  const _visibleIds = new Set(properties.map((p) => String(p.id)));
+  const _inScope = (pid) => _visibleIds.has(String(pid));
+  const rentPayments = _accessMatch ? _allRent.filter((r) => _inScope(r.propertyId)) : _allRent;
+  const expenses = _accessMatch ? _allExpenses.filter((e) => _inScope(e.propertyId)) : _allExpenses;
+  const documents = _accessMatch ? _allDocuments.filter((d) => _inScope(d.propertyId)) : _allDocuments;
+  const transactions = _accessMatch ? _allTxns.filter((t) => _inScope(t.propertyId)) : _allTxns;
+  const sharedTasks = _accessMatch ? _allTasks.filter((t) => _inScope(t.linkedTo?.propertyId)) : _allTasks;
+  const sharedLists = _accessMatch ? _allLists.filter((l) => _inScope(l.linkedTo?.itemId)) : _allLists;
 
   const ownershipHook = useOwnership(currentUser, saveOwnershipRef.current, showToast);
   const {
@@ -485,6 +521,56 @@ export default function RainbowRentals() {
     };
   }, [user]);
 
+  // Bank-deposit reconcile slice written by the mikeslife bridge cron.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'rentalData', 'incomeActuals'),
+      (snap) => { if (snap.exists()) setIncomeActuals(snap.data()); },
+      (e) => console.error('incomeActuals load:', e));
+    return () => unsub();
+  }, [user]);
+
+  // Citi •4793 confirm-inbox slice written by the mikeslife bridge cron.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'rentalData', 'cardInbox'),
+      (snap) => { if (snap.exists()) setCardInbox(snap.data()); },
+      (e) => console.error('cardInbox load:', e));
+    return () => unsub();
+  }, [user]);
+
+  // Liam confirms a card charge → create a linked expense (the bridge tags the
+  // mikesmoney txn on its next run; moneyTxnId prevents a duplicate).
+  // Durably drop a charge from the inbox doc so it doesn't reappear on reload
+  // before the next bridge run (which also reconciles via expense links / dismissed).
+  const removeInboxItem = async (txnId, extra = {}) => {
+    setHandledInboxIds((prev) => [...prev, txnId]);
+    const remaining = (cardInbox?.items || []).filter((it) => it.txnId !== txnId);
+    try { await setDoc(doc(db, 'rentalData', 'cardInbox'), { items: remaining, ...extra }, { merge: true }); }
+    catch (e) { showToast && showToast('Sync issue: ' + e.message, 'error'); }
+  };
+  const confirmCardCharge = async (item, { propertyId, propertyName, category, reason }) => {
+    addExpense({
+      propertyId: propertyId || '',
+      propertyName: propertyName || '',
+      category: category || 'maintenance',
+      description: reason || item.merchant || 'Card expense',
+      amount: item.amount,
+      date: item.date,
+      vendor: item.merchant || '',
+      notes: '',
+      receiptPhoto: '',
+      paidWith: 'citi',
+      source: 'citi-4793',
+      moneyTxnId: item.txnId,
+      moneyMatch: 'matched',
+    });
+    await removeInboxItem(item.txnId);
+  };
+  const dismissCardCharge = async (item) => {
+    await removeInboxItem(item.txnId, { dismissed: arrayUnion(item.txnId) });
+  };
+
   // ========== AUTO-CREATE RECURRING EXPENSES ==========
   // Uses a Firestore TRANSACTION to atomically read-modify-write.
   // This eliminates the race condition where onSnapshot + setState + async save
@@ -687,7 +773,7 @@ export default function RainbowRentals() {
   const todayTasks = pendingTasks.filter(isTaskDueToday);
   const overdueTasks = pendingTasks.filter(t => {
     if (!t.dueDate) return false;
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalStr();
     return t.dueDate < today;
   });
 
@@ -722,7 +808,7 @@ export default function RainbowRentals() {
         <RainbowBar />
 
         {/* Header */}
-        <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10">
+        <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Mobile: section name with dropdown */}
@@ -847,6 +933,8 @@ export default function RainbowRentals() {
           )}
         </header>
 
+        <RupertBanner db={db} accent="#fb7185" />
+
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 py-4 pb-32">
           {dataLoading ? (
@@ -860,6 +948,7 @@ export default function RainbowRentals() {
                 <RentReconciliation
                   properties={properties}
                   rentPayments={rentPayments}
+                  incomeActuals={incomeActuals}
                   getEffectiveStatus={getEffectiveStatus}
                   onRecordRent={(prop, monthKey, cell) => {
                     const shortfall = cell && cell.state === 'short' ? (cell.expected - cell.received) : null;
@@ -885,18 +974,20 @@ export default function RainbowRentals() {
                     const now = new Date();
                     const currentYear = now.getFullYear();
                     const currentMonthIdx = now.getMonth(); // 0-based
+                    const reportYear = dashboardReportYear;
+                    const isCurrentYear = reportYear === currentYear;
                     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
                     // State-like behavior using a data attribute on the container
                     // We'll use a simple approach: store selected month in a ref-like pattern
-                    const reportMonth = dashboardReportMonth ?? currentMonthIdx; // null = current month, 12 = YTD
+                    const reportMonth = dashboardReportMonth ?? (isCurrentYear ? currentMonthIdx : 12); // null = current month, 12 = YTD/full year
                     const isYTD = reportMonth === 12;
-                    const selectedMonthLabel = isYTD ? `${currentYear} Year-to-Date` : `${monthNames[reportMonth]} ${currentYear}`;
+                    const selectedMonthLabel = isYTD ? (isCurrentYear ? `${reportYear} Year-to-Date` : `${reportYear} Full Year`) : `${monthNames[reportMonth]} ${reportYear}`;
 
                     // Build prefix filter for date matching
                     const getDateFilter = (monthIdx) => {
-                      if (monthIdx === 12) return String(currentYear); // YTD
-                      return `${currentYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+                      if (monthIdx === 12) return String(reportYear); // YTD / full year
+                      return `${reportYear}-${String(monthIdx + 1).padStart(2, '0')}`;
                     };
                     const datePrefix = getDateFilter(reportMonth);
 
@@ -967,12 +1058,24 @@ export default function RainbowRentals() {
                     const fmtShort = (v) => v === 0 ? '—' : formatCurrency(v);
 
                     return (
-                      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
+                      <div id="pnl-print" className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
                         {/* Header */}
-                        <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                           <h3 className="text-base font-bold text-white">
-                            Monthly Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
+                            P&amp;L Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
                           </h3>
+                          <div className="flex items-center gap-2 no-print">
+                            <div className="flex items-center gap-1 bg-white/[0.06] rounded-lg px-1 py-0.5">
+                              <button onClick={() => setDashboardReportYear((y) => Math.max(2020, y - 1))}
+                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm">‹</button>
+                              <span className="text-sm font-semibold text-white px-1 tabular-nums">{reportYear}</span>
+                              <button onClick={() => setDashboardReportYear((y) => Math.min(currentYear, y + 1))}
+                                disabled={reportYear >= currentYear}
+                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm disabled:opacity-30">›</button>
+                            </div>
+                            <button onClick={() => window.print()}
+                              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold">🖨 Print / PDF</button>
+                          </div>
                         </div>
 
                         {/* Month tabs */}
@@ -983,7 +1086,7 @@ export default function RainbowRentals() {
                               className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${
                                 reportMonth === idx
                                   ? 'bg-amber-500 text-slate-900'
-                                  : idx <= currentMonthIdx
+                                  : (!isCurrentYear || idx <= currentMonthIdx)
                                     ? 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12]'
                                     : 'bg-white/[0.03] text-white/25'
                               }`}
@@ -1153,7 +1256,7 @@ export default function RainbowRentals() {
                   {/* Quick link to Action Items if there are pending tasks or active checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
                     );
                     const pendingCount = sharedTasks.filter(t => t.status !== 'done').length;
                     const checklistCount = activeChecklists.length;
@@ -1437,6 +1540,117 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
+                  {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
+                  {canManage && (
+                    <CardInbox
+                      items={(cardInbox?.items || []).filter((it) => !handledInboxIds.includes(it.txnId))}
+                      properties={properties}
+                      onConfirm={confirmCardCharge}
+                      onDismiss={dismissCardCharge}
+                    />
+                  )}
+
+                  {/* ---- Liam's weekly update card (managers only) ---- */}
+                  {canManage && (() => {
+                    const now = new Date();
+                    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    // ISO week label
+                    const dt = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+                    const dayNum = (dt.getUTCDay() + 6) % 7; dt.setUTCDate(dt.getUTCDate() - dayNum + 3);
+                    const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+                    const weekNo = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+                    const weekId = `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+
+                    const rentedProps = properties.filter(p =>
+                      ['occupied', 'lease-expired', 'month-to-month'].includes(
+                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
+                      )
+                    );
+                    const paidPropIds = new Set(
+                      rentPayments
+                        .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentMonth))
+                        .map(r => String(r.propertyId))
+                    );
+                    const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
+
+                    const sendDone = async () => {
+                      const at = new Date().toISOString();
+                      setWeeklySentAt(at);
+                      try {
+                        await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
+                          week: weekId, by: currentUser || 'Liam', at,
+                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked },
+                          mikeNotified: false, // push layer flips this when Mike is alerted
+                        }, { merge: true });
+                        // Ping Mike instantly via mikeslife (his real push token); the daily cron is a backstop.
+                        try { fetch('https://mikeslife.app/api/liam-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {}); } catch (_) { /* best effort */ }
+                        showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
+                      } catch (e) { showToast && showToast('Saved locally — sync issue: ' + e.message, 'error'); }
+                    };
+
+                    return (
+                      <div className="mb-6 rounded-2xl border border-indigo-400/30 bg-gradient-to-br from-indigo-500/15 to-purple-500/10 p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="text-white font-bold">🗓️ This week's update</h3>
+                          <span className="text-xs text-white/50">{weekId}</span>
+                        </div>
+                        <p className="text-sm text-white/60 mb-3">Record rents, any lease changes, and expenses — then tap <b>Done &amp; send</b>.</p>
+
+                        {/* Rents to record */}
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">💰 Rents to record {unpaidProps.length > 0 && `(${unpaidProps.length})`}</div>
+                          {unpaidProps.length === 0 ? (
+                            <div className="text-sm text-emerald-400/90">All rents recorded for {now.toLocaleString('en-US', { month: 'long' })} ✓</div>
+                          ) : unpaidProps.map(p => (
+                            <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                              <span className="text-sm text-white/85">{p.emoji || '🏠'} {p.name} <span className="text-white/45">· {formatCurrency(parseFloat(p.monthlyRent) || 0)}</span></span>
+                              <button
+                                onClick={() => setShowAddRentModal({ propertyId: p.id, propertyName: p.name, amount: parseFloat(p.monthlyRent) || '', month: currentMonth, datePaid: todayStr, status: 'paid', incomeType: 'rent' })}
+                                className="px-3 py-1 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold">Record</button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Lease + expense quick actions */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <button onClick={() => setShowTenantModal({ _pickProperty: true })}
+                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">📝 Update a lease</button>
+                          <button onClick={() => setShowAddExpenseModal('create')}
+                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
+                        </div>
+
+                        {/* Action item: update rents in Avail */}
+                        <button onClick={() => setAvailChecked(v => !v)}
+                          className="w-full flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-left">
+                          <span className={`flex-shrink-0 w-5 h-5 rounded-md border flex items-center justify-center text-xs ${availChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-white/30 text-transparent'}`}>✓</span>
+                          <span className="text-sm text-white/85">🔑 Update rent payments in <b>Avail</b></span>
+                        </button>
+
+                        {/* This week's to-dos (shared tasks) */}
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">✅ This week's to-dos {pendingTasks.length > 0 && `(${pendingTasks.length})`}</div>
+                          {pendingTasks.length === 0 ? (
+                            <div className="text-sm text-white/50">No open to-dos.</div>
+                          ) : pendingTasks.slice(0, 8).map(t => (
+                            <div key={t.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                              <span className="text-sm text-white/85 min-w-0 truncate pr-2">{t.title}{t.dueDate ? <span className="text-white/40"> · due {t.dueDate}</span> : null}</span>
+                              <button onClick={() => completeTask(t.id)}
+                                className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-emerald-500/80 text-white text-xs font-semibold">Done</button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {pushState !== 'granted' && (
+                          <button onClick={enableAlerts} className="w-full mb-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">🔔 Enable weekly reminders on this device</button>
+                        )}
+                        {weeklySentAt
+                          ? <div className="text-center text-sm text-emerald-400 font-semibold py-1">✓ Sent — Mike will be notified to pay you.</div>
+                          : <button onClick={sendDone} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:opacity-90 text-white font-bold">✅ Done &amp; send</button>}
+                      </div>
+                    );
+                  })()}
+
                   {/* Rents Due / Past Due */}
                   {(() => {
                     const now = new Date();
@@ -1551,16 +1765,16 @@ export default function RainbowRentals() {
                   {/* Active Move-In/Move-Out Checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
                     );
                     return (
                       <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Checklists</h3>
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Properties</h3>
                           <button onClick={() => setShowChecklistInitModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ New</button>
                         </div>
                         {activeChecklists.length === 0 ? (
-                          <p className="text-center text-white/30 py-6">No active checklists</p>
+                          <p className="text-center text-white/30 py-6">No active properties</p>
                         ) : (
                           <div className="space-y-2">
                             {activeChecklists.map(list => {
@@ -2293,9 +2507,9 @@ export default function RainbowRentals() {
             )}
 
             {/* Nav bar */}
-            <div className="relative bg-slate-900 border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-              {/* Tab buttons — all 6 sections */}
-              <div className="flex items-end justify-around px-1 pt-1 pb-1">
+            <div className="relative mx-auto w-fit max-w-[97vw] bg-slate-900/80 backdrop-blur-xl border border-slate-600/40 rounded-full shadow-2xl" style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+              {/* Tab buttons — all sections, floating dock */}
+              <div className="flex items-end justify-around gap-0.5 px-2 pt-1 pb-1 overflow-x-auto">
                 {[
                   { id: 'action-items', label: 'Actions', emoji: '✅', gradient: 'from-indigo-400 to-purple-500' },
                   { id: 'rentals', label: 'Props', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
@@ -2312,12 +2526,12 @@ export default function RainbowRentals() {
                       if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
                       setShowAddNewMenu(false);
                     }}
-                    className="relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all active:scale-95 min-w-[44px]"
+                    className="relative flex flex-col items-center justify-center py-2 rounded-xl transition-all active:scale-95 min-w-[48px]"
                   >
-                    <span className={`text-base mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
+                    <span className={`text-xl mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
                       {section.emoji}
                     </span>
-                    <span className={`text-[9px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
+                    <span className={`text-[10px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
                       {section.label}
                     </span>
                     {activeSection === section.id && (
