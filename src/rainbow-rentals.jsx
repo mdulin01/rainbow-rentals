@@ -1691,27 +1691,48 @@ export default function RainbowRentals() {
                     const dueFlags = flags.filter(f => !f.isPastDue);
 
                     const renderRow = (f) => (
-                      <button key={`${f.property.id}-${f.monthKey}`}
+                      <div key={`${f.property.id}-${f.monthKey}`}
                         onClick={() => { setActiveSection('rent'); }}
-                        className={`w-full text-left p-3 rounded-2xl border transition ${
+                        className={`w-full text-left p-3 rounded-2xl border transition cursor-pointer ${
                           f.isPastDue
                             ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
                             : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm">{f.property.emoji || '🏠'}</span>
-                            <span className={`text-sm font-medium ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
-                            <span className="text-[11px] text-white/30">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm flex-shrink-0">{f.property.emoji || '🏠'}</span>
+                            <span className={`text-sm font-medium truncate ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
+                            <span className="text-[11px] text-white/30 flex-shrink-0">
                               {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
                             </span>
                           </div>
-                          <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
-                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
+                              {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAddRentModal({
+                                  incomeType: 'rent',
+                                  propertyId: f.property.id,
+                                  propertyName: `${f.property.emoji || '🏠'} ${f.property.name}`,
+                                  tenantName: getPropertyTenants(f.property).map(t => t.name).filter(Boolean).join(', '),
+                                  month: f.monthKey,
+                                  amount: parseFloat(f.property.monthlyRent) || '',
+                                  status: 'paid',
+                                });
+                              }}
+                              className={`px-3 py-1 rounded-lg text-white text-xs font-semibold transition ${
+                                f.isPastDue ? 'bg-red-500/90 hover:bg-red-500' : 'bg-emerald-500/90 hover:bg-emerald-500'
+                              }`}
+                            >
+                              Record
+                            </button>
+                          </div>
                         </div>
-                      </button>
+                      </div>
                     );
 
                     return (
