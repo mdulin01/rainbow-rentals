@@ -240,7 +240,15 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-medium text-emerald-400">{formatCurrency(payment.amount || 0)}</span>
                     </td>
-                    <td className="px-4 py-3">{getStatusBadge(payment.status)}</td>
+                    <td className="px-4 py-3">
+                      {getStatusBadge(payment.status)}
+                      {payment.source === 'mikes-money' && (
+                        <span
+                          className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400"
+                          title="Auto-synced from Mike's Money bank data"
+                        >🔁 auto</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
