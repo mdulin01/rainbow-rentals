@@ -1651,55 +1651,91 @@ export default function RainbowRentals() {
                     );
                   })()}
 
-                  {/* Rents Due / Past Due */}
+                  {/* Rents Due / Past Due — scans January through the current month (not just
+                      the current month) so an unpaid prior month, e.g. June rent still unpaid
+                      once July starts, keeps showing up here instead of silently disappearing. */}
                   {(() => {
                     const now = new Date();
-                    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    const currentYear = now.getFullYear();
+                    const currentMonthIdx = now.getMonth(); // 0-based
                     const dayOfMonth = now.getDate();
-                    const monthLabel = now.toLocaleString('en-US', { month: 'long' });
 
-                    // Find rented properties that haven't paid this month
-                    const rentedProps = properties.filter(p =>
+                    const rentProps = properties.filter(p =>
                       ['occupied', 'lease-expired', 'month-to-month'].includes(
                         p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-                      )
+                      ) && (parseFloat(p.monthlyRent) || 0) > 0
                     );
-                    const paidPropIds = new Set(
-                      rentPayments
-                        .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.datePaid || r.month || '').startsWith(currentMonth))
-                        .map(r => String(r.propertyId))
-                    );
-                    const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
 
-                    if (unpaidProps.length === 0) return null;
-                    const isPastDue = dayOfMonth > 5;
+                    // Every (property, month) from Jan through this month with no paid/partial
+                    // rent recorded — mirrors the Reconcile tab's "Needs attention" logic so a
+                    // missed month stays flagged until it's actually paid, not until the month ends.
+                    const flags = [];
+                    for (let m = 0; m <= currentMonthIdx; m++) {
+                      const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
+                      rentProps.forEach(p => {
+                        const received = rentPayments
+                          .filter(r => String(r.propertyId) === String(p.id)
+                            && (r.status === 'paid' || r.status === 'partial')
+                            && (r.datePaid || r.month || '').startsWith(monthKey))
+                          .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+                        if (received === 0) {
+                          const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
+                          flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
+                        }
+                      });
+                    }
+
+                    if (flags.length === 0) return null;
+                    flags.sort((a, b) => a.monthIdx - b.monthIdx);
+                    const pastDueFlags = flags.filter(f => f.isPastDue);
+                    const dueFlags = flags.filter(f => !f.isPastDue);
+
+                    const renderRow = (f) => (
+                      <button key={`${f.property.id}-${f.monthKey}`}
+                        onClick={() => { setActiveSection('rent'); }}
+                        className={`w-full text-left p-3 rounded-2xl border transition ${
+                          f.isPastDue
+                            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+                            : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{f.property.emoji || '🏠'}</span>
+                            <span className={`text-sm font-medium ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
+                            <span className="text-[11px] text-white/30">
+                              {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
+                            </span>
+                          </div>
+                          <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
+                            {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
+                          </span>
+                        </div>
+                      </button>
+                    );
+
                     return (
                       <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                          {isPastDue ? 'Rents Past Due' : 'Rents Due'} — {monthLabel}
-                        </h3>
-                        <div className="space-y-2">
-                          {unpaidProps.map(p => (
-                            <button key={p.id}
-                              onClick={() => { setActiveSection('rent'); }}
-                              className={`w-full text-left p-3 rounded-2xl border transition ${
-                                isPastDue
-                                  ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                                  : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">{p.emoji || '🏠'}</span>
-                                  <span className={`text-sm font-medium ${isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{p.name}</span>
-                                </div>
-                                <span className={`text-sm font-bold ${isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
-                                  {formatCurrency(parseFloat(p.monthlyRent) || 0)}
-                                </span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                        {pastDueFlags.length > 0 && (
+                          <div className="mb-3">
+                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                              Rents Past Due{pastDueFlags.length > 1 ? ` (${pastDueFlags.length})` : ''}
+                            </h3>
+                            <div className="space-y-2">
+                              {pastDueFlags.map(renderRow)}
+                            </div>
+                          </div>
+                        )}
+                        {dueFlags.length > 0 && (
+                          <div>
+                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                              Rents Due — {now.toLocaleString('en-US', { month: 'long' })}
+                            </h3>
+                            <div className="space-y-2">
+                              {dueFlags.map(renderRow)}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
