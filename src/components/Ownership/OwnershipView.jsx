@@ -2,9 +2,14 @@ import React from 'react';
 import { Plus, TrendingUp, TrendingDown, Edit3, Users } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils';
 
-// Properties whose name matches this are excluded from the pooled ownership/equity calc
-const isExcludedFromOwnership = (property) =>
-  (property.name || '').toLowerCase().includes('governor');
+// Properties excluded from the pooled ownership/equity calc:
+// N. Church is Mike's own owner-occupied residence, Brookhurst is Adam Britten's home
+// (separate arrangement) — neither is part of the 4-property rental pool Liam invested in.
+const EXCLUDED_PROPERTY_NAMES = ['n. church', 'brookhurst'];
+const isExcludedFromOwnership = (property) => {
+  const name = (property.name || '').toLowerCase();
+  return EXCLUDED_PROPERTY_NAMES.some((excluded) => name.includes(excluded));
+};
 
 export default function OwnershipView({ properties, investors, onAdd, onEdit }) {
   const includedProperties = (properties || []).filter(p => !isExcludedFromOwnership(p));
