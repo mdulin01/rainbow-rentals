@@ -79,7 +79,7 @@ import BuildInfo from './components/BuildInfo';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
 import { requestPushToken } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
@@ -185,7 +185,8 @@ export default function RainbowRentals() {
     propertyViewMode, setPropertyViewMode,
     showNewPropertyModal, setShowNewPropertyModal,
     showTenantModal, setShowTenantModal,
-    addProperty, updateProperty, deleteProperty, addOrUpdateTenant, removeTenant,
+    addProperty: _addProperty, updateProperty: _updateProperty, deleteProperty: _deleteProperty,
+    addOrUpdateTenant: _addOrUpdateTenant, removeTenant: _removeTenant,
   } = propertiesHook;
 
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
@@ -195,7 +196,7 @@ export default function RainbowRentals() {
     documentTypeFilter, setDocumentTypeFilter,
     documentPropertyFilter, setDocumentPropertyFilter,
     showAddDocumentModal, setShowAddDocumentModal,
-    addDocument, updateDocument, deleteDocument,
+    addDocument: _addDocument, updateDocument: _updateDocument, deleteDocument: _deleteDocument,
   } = documentsHook;
 
   const financialsHook = useFinancials(currentUser, saveFinancialsRef.current, showToast);
@@ -205,7 +206,7 @@ export default function RainbowRentals() {
     transactionTypeFilter, setTransactionTypeFilter,
     transactionPropertyFilter, setTransactionPropertyFilter,
     showAddTransactionModal, setShowAddTransactionModal,
-    addTransaction, updateTransaction, deleteTransaction,
+    addTransaction: _addTransaction, updateTransaction: _updateTransaction, deleteTransaction: _deleteTransaction,
     getTotalIncome, getTotalExpenses, getProfit, getMonthlyBreakdown, getPropertyBreakdown, getFilteredTransactions,
   } = financialsHook;
 
@@ -213,7 +214,7 @@ export default function RainbowRentals() {
   const {
     rentPayments: _allRent, setRentPayments,
     showAddRentModal, setShowAddRentModal,
-    addRentPayment, updateRentPayment, deleteRentPayment,
+    addRentPayment: _addRentPayment, updateRentPayment: _updateRentPayment, deleteRentPayment: _deleteRentPayment,
   } = rentHook;
 
   // Pass db directly — hook saves to Firestore internally, no ref indirection
@@ -221,7 +222,7 @@ export default function RainbowRentals() {
   const {
     expenses: _allExpenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
-    addExpense, updateExpense, deleteExpense,
+    addExpense: _addExpense, updateExpense: _updateExpense, deleteExpense: _deleteExpense,
   } = expensesHook;
 
   // ---- Per-property owner access (e.g. Adam → only Brookhurst). Single choke-point:
@@ -247,6 +248,113 @@ export default function RainbowRentals() {
     addInvestor, updateInvestor, deleteInvestor,
   } = ownershipHook;
 
+  // ========== ACTIVITY LOG + SOFT-DELETE (trash) ==========
+  // rentalData/activity — append-only who/what/when (capped 300); powers the
+  // "This week" digest and gives the two-operator setup an audit trail.
+  // rentalData/trash — deleted items park here first (capped 100) with one-tap Restore.
+  const [activityEvents, setActivityEvents] = useState([]);
+  const [trashItems, setTrashItems] = useState([]);
+  const activityRef = useRef([]);
+  useEffect(() => { activityRef.current = activityEvents; }, [activityEvents]);
+  const trashRef = useRef([]);
+  useEffect(() => { trashRef.current = trashItems; }, [trashItems]);
+
+  const logActivity = useCallback(async (action, detail) => {
+    if (!user) return;
+    const ev = { at: new Date().toISOString(), by: currentUser || 'unknown', action, detail: String(detail || '').slice(0, 120) };
+    const next = [ev, ...activityRef.current].slice(0, 300);
+    setActivityEvents(next);
+    try { await setDoc(doc(db, 'rentalData', 'activity'), JSON.parse(JSON.stringify({ events: next, lastUpdated: ev.at })), { merge: true }); }
+    catch (e) { console.error('activity save:', e); }
+  }, [user, currentUser]);
+
+  const trashItem = useCallback(async (type, payload) => {
+    if (!user || !payload) return;
+    const item = { trashId: `${type}-${Date.now()}`, type, payload, deletedBy: currentUser || 'unknown', deletedAt: new Date().toISOString() };
+    const next = [item, ...trashRef.current].slice(0, 100);
+    setTrashItems(next);
+    try { await setDoc(doc(db, 'rentalData', 'trash'), JSON.parse(JSON.stringify({ items: next, lastUpdated: item.deletedAt })), { merge: true }); }
+    catch (e) { console.error('trash save:', e); }
+  }, [user, currentUser]);
+
+  const removeFromTrash = useCallback(async (trashId) => {
+    const next = trashRef.current.filter(i => i.trashId !== trashId);
+    setTrashItems(next);
+    try { await setDoc(doc(db, 'rentalData', 'trash'), JSON.parse(JSON.stringify({ items: next, lastUpdated: new Date().toISOString() })), { merge: true }); }
+    catch (e) { console.error('trash save:', e); }
+  }, []);
+
+  // Wrapped CRUD: adds/updates log activity; deletes archive to trash first.
+  const addRentPayment = useCallback((p) => { _addRentPayment(p); logActivity('rent.add', `${p.propertyName || ''} ${p.month || ''} $${p.amount}`); }, [_addRentPayment, logActivity]);
+  const updateRentPayment = useCallback((id, u) => { _updateRentPayment(id, u); const it = rentPayments.find(r => r.id === id); logActivity('rent.update', `${it?.propertyName || id}${u.status ? ' → ' + u.status : ''}`); }, [_updateRentPayment, logActivity, rentPayments]);
+  const deleteRentPayment = useCallback((id) => { const it = rentPayments.find(r => r.id === id); if (it) trashItem('rent', it); _deleteRentPayment(id); logActivity('rent.delete', `${it?.propertyName || ''} ${it?.month || ''} $${it?.amount || ''}`); }, [_deleteRentPayment, rentPayments, trashItem, logActivity]);
+  const addExpense = useCallback((e) => { _addExpense(e); logActivity('expense.add', `${e.description || e.category} $${e.amount}`); }, [_addExpense, logActivity]);
+  const updateExpense = useCallback((id, u) => { _updateExpense(id, u); const it = expenses.find(x => x.id === id); logActivity('expense.update', it?.description || id); }, [_updateExpense, logActivity, expenses]);
+  const deleteExpense = useCallback((id) => { const it = expenses.find(x => x.id === id); if (it) trashItem('expense', it); _deleteExpense(id); logActivity('expense.delete', `${it?.description || ''} $${it?.amount || ''}`); }, [_deleteExpense, expenses, trashItem, logActivity]);
+  const addProperty = useCallback((p) => { _addProperty(p); logActivity('property.add', p.name); }, [_addProperty, logActivity]);
+  const updateProperty = useCallback((id, u) => { _updateProperty(id, u); const it = properties.find(x => String(x.id) === String(id)); logActivity('property.update', it?.name || id); }, [_updateProperty, logActivity, properties]);
+  const deleteProperty = useCallback((id) => { const it = properties.find(x => String(x.id) === String(id)); if (it) trashItem('property', it); _deleteProperty(id); logActivity('property.delete', it?.name || id); }, [_deleteProperty, properties, trashItem, logActivity]);
+  const addOrUpdateTenant = useCallback((pid, t) => { _addOrUpdateTenant(pid, t); const p = properties.find(x => String(x.id) === String(pid)); logActivity('tenant.save', `${t?.name || ''} @ ${p?.name || pid}`); }, [_addOrUpdateTenant, logActivity, properties]);
+  const removeTenant = useCallback((pid, tid) => { _removeTenant(pid, tid); const p = properties.find(x => String(x.id) === String(pid)); logActivity('tenant.remove', p?.name || pid); }, [_removeTenant, logActivity, properties]);
+  const addDocument = useCallback((d) => { _addDocument(d); logActivity('document.add', d.name || d.type); }, [_addDocument, logActivity]);
+  const updateDocument = useCallback((id, u) => { _updateDocument(id, u); logActivity('document.update', id); }, [_updateDocument, logActivity]);
+  const deleteDocument = useCallback((id) => { const it = documents.find(x => x.id === id); if (it) { const { fileData, ...meta } = it; trashItem('document', it.fileData && String(it.fileData).length > 400000 ? meta : it); } _deleteDocument(id); logActivity('document.delete', it?.name || id); }, [_deleteDocument, documents, trashItem, logActivity]);
+  const addTransaction = useCallback((t) => { _addTransaction(t); logActivity('transaction.add', `${t.description || t.type} $${t.amount}`); }, [_addTransaction, logActivity]);
+  const updateTransaction = useCallback((id, u) => { _updateTransaction(id, u); logActivity('transaction.update', id); }, [_updateTransaction, logActivity]);
+  const deleteTransaction = useCallback((id) => { const it = transactions.find(x => x.id === id); if (it) trashItem('transaction', it); _deleteTransaction(id); logActivity('transaction.delete', `${it?.description || ''} $${it?.amount || ''}`); }, [_deleteTransaction, transactions, trashItem, logActivity]);
+
+  const restoreTrashItem = useCallback((item) => {
+    const p = item.payload || {};
+    if (item.type === 'rent') _addRentPayment(p);
+    else if (item.type === 'expense') _addExpense(p);
+    else if (item.type === 'property') _addProperty(p);
+    else if (item.type === 'document') _addDocument(p);
+    else if (item.type === 'transaction') _addTransaction(p);
+    removeFromTrash(item.trashId);
+    logActivity('restore', `${item.type}: ${p.name || p.description || p.propertyName || ''}`);
+  }, [_addRentPayment, _addExpense, _addProperty, _addDocument, _addTransaction, removeFromTrash, logActivity]);
+
+  // ========== EXPORT + WEEKLY AUTO-BACKUP ==========
+  const buildExportPayload = useCallback(() => ({
+    exportedAt: new Date().toISOString(), exportedBy: currentUser || 'unknown',
+    properties: _allProperties, rentPayments: _allRent, expenses: _allExpenses,
+    transactions: _allTxns, documentsIndex: _allDocuments.map(({ fileData, ...meta }) => meta),
+    investors, sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
+  }), [currentUser, _allProperties, _allRent, _allExpenses, _allTxns, _allDocuments, investors, _allTasks, _allLists, sharedIdeas]);
+
+  const exportAllData = useCallback(() => {
+    const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rainbow-reality-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    logActivity('export', 'full JSON export downloaded');
+    showToast('Export downloaded', 'success');
+  }, [buildExportPayload, logActivity, showToast]);
+
+  // Weekly snapshot into rentalData/backup-YYYY-MM-DD (keeps last 8) — runs on app
+  // open when the last backup is >6.5 days old. Client-side so no extra infra.
+  useEffect(() => {
+    if (!user || dataLoading || !canManage) return;
+    (async () => {
+      try {
+        const metaSnap = await getDoc(doc(db, 'rentalData', 'backupMeta'));
+        const meta = metaSnap.exists() ? metaSnap.data() : {};
+        if (meta.lastAt && (Date.now() - new Date(meta.lastAt).getTime()) < 6.5 * 86400000) return;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        await setDoc(doc(db, 'rentalData', `backup-${dateStr}`), {
+          json: JSON.stringify(buildExportPayload()), at: new Date().toISOString(), by: currentUser || 'auto',
+        });
+        const dates = [...new Set([...(meta.dates || []), dateStr])].sort();
+        for (const d of dates.slice(0, Math.max(0, dates.length - 8))) {
+          try { await deleteDoc(doc(db, 'rentalData', `backup-${d}`)); } catch { /* ignore */ }
+        }
+        await setDoc(doc(db, 'rentalData', 'backupMeta'), { lastAt: new Date().toISOString(), dates: dates.slice(-8) });
+        console.log('[backup] weekly snapshot written:', dateStr);
+      } catch (e) { console.error('backup:', e); }
+    })();
+  }, [user, dataLoading, canManage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Property financial breakdown modal
   const [showPropertyBreakdown, setShowPropertyBreakdown] = useState(false);
 
@@ -264,10 +372,12 @@ export default function RainbowRentals() {
       if (firebaseUser) {
         setUser(firebaseUser);
         const userEmail = firebaseUser.email?.toLowerCase();
-        const isOwnerUser = ownerEmails.some(email => userEmail?.includes(email.split('@')[0]));
+        // EXACT email match — the loose substring match could false-positive
+        // (rules enforce server-side either way; this is the UI gate).
+        const isOwnerUser = ownerEmails.includes(userEmail);
         setIsOwner(isOwnerUser);
         if (isOwnerUser) {
-          const displayName = userEmail?.includes('mdulin') ? 'Mike' : 'Liam';
+          const displayName = userEmail?.includes('mdulin') ? 'Mike' : userEmail?.includes('adam') ? 'Adam' : 'Liam';
           setCurrentUser(displayName);
         }
       } else {
@@ -551,6 +661,18 @@ export default function RainbowRentals() {
     return () => unsub();
   }, [user]);
 
+  // Activity log + trash subscriptions
+  useEffect(() => {
+    if (!user) return;
+    const u1 = onSnapshot(doc(db, 'rentalData', 'activity'),
+      (snap) => { if (snap.exists()) setActivityEvents(snap.data().events || []); },
+      (e) => console.error('activity load:', e));
+    const u2 = onSnapshot(doc(db, 'rentalData', 'trash'),
+      (snap) => { if (snap.exists()) setTrashItems(snap.data().items || []); },
+      (e) => console.error('trash load:', e));
+    return () => { u1(); u2(); };
+  }, [user]);
+
   const resolveReviewItem = async (itemId, patch) => {
     const updated = expenseReviewItems.map(i => i.id === itemId
       ? { ...i, ...patch, resolvedAt: new Date().toISOString(), resolvedBy: currentUser || 'unknown' }
@@ -770,6 +892,21 @@ export default function RainbowRentals() {
   // Login screen
   if (!user) {
     return <LoginScreen onLogin={handleGoogleLogin} loading={false} />;
+  }
+
+  // Signed in, but not on the allowlist — Firestore/Storage rules already block all
+  // data server-side; this makes it explicit instead of a silently broken app.
+  if (!isOwner) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="max-w-sm w-full bg-white/[0.04] border border-white/10 rounded-3xl p-8 text-center">
+          <div className="text-5xl mb-4">🌈</div>
+          <h1 className="text-xl font-bold text-white mb-2">This app is private</h1>
+          <p className="text-sm text-white/50 mb-6">You're signed in as {user.email}, which doesn't have access to Rainbow Reality. Ask Michael if you think you should.</p>
+          <button onClick={handleLogout} className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Sign out</button>
+        </div>
+      </div>
+    );
   }
 
   // Check if any modal is open (to hide nav)
@@ -1714,6 +1851,64 @@ export default function RainbowRentals() {
                       </div>
                     );
                   })()}
+
+                  {/* ---- This week digest + export (managers only) ---- */}
+                  {canManage && (() => {
+                    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+                    const recent = activityEvents.filter(e => e.at >= weekAgo);
+                    const rentsThisWeek = rentPayments.filter(r => (r.datePaid || '') >= weekAgo.slice(0, 10) && (r.status === 'paid' || r.status === 'partial'));
+                    const rentTotal = rentsThisWeek.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+                    const expThisWeek = expenses.filter(e => (e.createdAt || '') >= weekAgo);
+                    const expTotal = expThisWeek.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+                    return (
+                      <div className="mb-6 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                        <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">🗓️ This Week</h3>
+                          <button onClick={exportAllData} className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold" title="Download a full JSON export of all data (auto-backup also runs weekly)">⬇ Export data</button>
+                        </div>
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-white/70 mb-2">
+                          <span>💰 {rentsThisWeek.length} rent{rentsThisWeek.length === 1 ? '' : 's'} received · <span className="text-emerald-400 font-semibold">{formatCurrency(rentTotal)}</span></span>
+                          <span>💸 {expThisWeek.length} expense{expThisWeek.length === 1 ? '' : 's'} added · <span className="text-red-400 font-semibold">{formatCurrency(expTotal)}</span></span>
+                          <span>📝 {recent.length} change{recent.length === 1 ? '' : 's'} logged</span>
+                        </div>
+                        {recent.length > 0 && (
+                          <div className="space-y-1">
+                            {recent.slice(0, 8).map((e, i) => (
+                              <div key={i} className="text-xs text-white/40 flex items-baseline gap-2">
+                                <span className="text-white/60 font-medium shrink-0 w-12">{e.by}</span>
+                                <span className="shrink-0">{e.action}</span>
+                                <span className="truncate">{e.detail}</span>
+                                <span className="ml-auto shrink-0">{new Date(e.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                              </div>
+                            ))}
+                            {recent.length > 8 && <div className="text-[11px] text-white/25">…and {recent.length - 8} more</div>}
+                          </div>
+                        )}
+                        {recent.length === 0 && <p className="text-xs text-white/30">Change history starts now — edits by you and Liam will appear here.</p>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ---- Recently deleted / restore (managers only) ---- */}
+                  {canManage && trashItems.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">🗑️ Recently Deleted ({trashItems.length})</h3>
+                      <div className="space-y-2">
+                        {trashItems.slice(0, 6).map(item => (
+                          <div key={item.trashId} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.03] border border-white/10">
+                            <div className="min-w-0 flex-1 pr-3">
+                              <span className="text-sm text-white/70">{item.type}: {item.payload?.name || item.payload?.description || item.payload?.propertyName || item.trashId}</span>
+                              <span className="block text-[11px] text-white/30">deleted by {item.deletedBy} · {new Date(item.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{item.payload?.amount ? ` · ${formatCurrency(parseFloat(item.payload.amount) || 0)}` : ''}</span>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button onClick={() => restoreTrashItem(item)} className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25">↩ Restore</button>
+                              <button onClick={() => removeFromTrash(item.trashId)} className="px-2.5 py-1.5 rounded-xl bg-white/5 text-white/40 text-xs hover:bg-white/10" title="Remove from trash permanently">✕</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Rents Due / Past Due — scans January through the current month (not just
                       the current month) so an unpaid prior month, e.g. June rent still unpaid
