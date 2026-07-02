@@ -133,6 +133,7 @@ export default function RainbowRentals() {
   const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
   const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
   const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
+  const [expenseReviewItems, setExpenseReviewItems] = useState([]); // Liam-named bank txns + Mike's rental-tagged (mikes-money push)
   const [dashboardReportYear, setDashboardReportYear] = useState(new Date().getFullYear());
   const enableAlerts = async () => {
     const r = await requestPushToken();
@@ -538,6 +539,29 @@ export default function RainbowRentals() {
       (e) => console.error('cardInbox load:', e));
     return () => unsub();
   }, [user]);
+
+  // Expense-review queue pushed by mikes-money's Rentals page: outflows carrying
+  // Liam's name (Cash App / ACH INDN) + anything Mike hand-tags class Rental.
+  // Complements the Citi •4793 CardInbox (different source: checking/CC descriptors).
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'rentalData', 'expenseReview'),
+      (snap) => { if (snap.exists()) setExpenseReviewItems(snap.data().items || []); },
+      (e) => console.error('expenseReview load:', e));
+    return () => unsub();
+  }, [user]);
+
+  const resolveReviewItem = async (itemId, patch) => {
+    const updated = expenseReviewItems.map(i => i.id === itemId
+      ? { ...i, ...patch, resolvedAt: new Date().toISOString(), resolvedBy: currentUser || 'unknown' }
+      : i);
+    setExpenseReviewItems(updated);
+    try {
+      await setDoc(doc(db, 'rentalData', 'expenseReview'), JSON.parse(JSON.stringify({
+        items: updated, lastUpdated: new Date().toISOString(), updatedBy: currentUser || 'unknown',
+      })), { merge: true });
+    } catch (e) { showToast && showToast('Sync issue: ' + e.message, 'error'); }
+  };
 
   // Liam confirms a card charge → create a linked expense (the bridge tags the
   // mikesmoney txn on its next run; moneyTxnId prevents a duplicate).
@@ -1550,6 +1574,46 @@ export default function RainbowRentals() {
                     />
                   )}
 
+                  {/* ---- Expense review queue from Mike's Money bank data (managers only) ---- */}
+                  {canManage && (() => {
+                    const pending = expenseReviewItems.filter(i => i.status === 'pending');
+                    if (pending.length === 0) return null;
+                    return (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                          💳 Expenses to Review ({pending.length}) <span className="normal-case font-normal text-white/30">— from Mike's Money bank data</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {pending.map(item => (
+                            <ExpenseReviewCard
+                              key={item.id}
+                              item={item}
+                              properties={properties}
+                              onApprove={(patch) => {
+                                const prop = properties.find(p => String(p.id) === String(patch.propertyId));
+                                addExpense({
+                                  id: `rev-${item.id}`,
+                                  propertyId: patch.propertyId || '',
+                                  propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
+                                  category: patch.category,
+                                  description: item.description + (item.reason === 'liam' ? ' (Liam)' : ''),
+                                  amount: item.amount,
+                                  date: item.date,
+                                  source: 'mikes-money-review',
+                                });
+                                resolveReviewItem(item.id, { status: 'approved', propertyId: patch.propertyId, category: patch.category });
+                              }}
+                              onDismiss={() => resolveReviewItem(item.id, { status: 'dismissed' })}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-white/30 mt-2">
+                          Approve = recorded as a rental expense (Expenses + Schedule E). Dismiss = not a rental expense.
+                        </p>
+                      </div>
+                    );
+                  })()}
+
                   {/* ---- Liam's weekly update card (managers only) ---- */}
                   {canManage && (() => {
                     const now = new Date();
@@ -2539,5 +2603,48 @@ export default function RainbowRentals() {
         <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-orange-500 via-yellow-400 via-green-500 via-blue-500 to-purple-500 hidden md:block" />
       </div>
     </SharedHubProvider>
+  );
+}
+
+// Card for one pending expense-review item (pushed from Mike's Money bank data).
+// Pick property + category, then Approve → expense record, or Dismiss.
+function ExpenseReviewCard({ item, properties, onApprove, onDismiss }) {
+  const [propertyId, setPropertyId] = useState(item.suggestedPropertyId || '');
+  const [category, setCategory] = useState('repair');
+  return (
+    <div className="p-3 rounded-2xl border bg-sky-500/10 border-sky-500/20">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-sky-300 truncate">{item.description}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 shrink-0">
+              {item.reason === 'liam' ? '👷 Liam' : '🏘️ tagged rental'}
+            </span>
+          </div>
+          <div className="text-xs text-white/40 mt-0.5">{formatDate(item.date)}{item.detail && item.detail !== item.description ? ` · ${item.detail.slice(0, 60)}` : ''}</div>
+        </div>
+        <span className="text-sm font-bold text-sky-300 shrink-0">{formatCurrency(item.amount || 0)}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <select value={propertyId} onChange={e => setPropertyId(e.target.value)}
+          className="px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-sky-500/50">
+          <option value="">Property…</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.emoji || '🏠'} {p.name}</option>)}
+        </select>
+        <select value={category} onChange={e => setCategory(e.target.value)}
+          className="px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-sky-500/50">
+          {expenseCategories.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+        </select>
+        <div className="flex-1" />
+        <button onClick={() => onApprove({ propertyId, category })} disabled={!propertyId}
+          className="px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed">
+          ✓ Rental expense
+        </button>
+        <button onClick={onDismiss}
+          className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white/10 text-white/60 hover:bg-white/20">
+          ✕ Not rental
+        </button>
+      </div>
+    </div>
   );
 }
