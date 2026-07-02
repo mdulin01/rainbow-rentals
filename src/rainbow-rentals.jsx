@@ -2618,7 +2618,7 @@ function ExpenseReviewCard({ item, properties, onApprove, onDismiss }) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-sky-300 truncate">{item.description}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 shrink-0">
-              {item.reason === 'liam' ? '👷 Liam' : '🏘️ tagged rental'}
+              {item.reason === 'liam' ? '👷 Liam' : item.reason === 'fifth-third' ? '🏦 5/3 acct' : '🏘️ tagged rental'}
             </span>
           </div>
           <div className="text-xs text-white/40 mt-0.5">{formatDate(item.date)}{item.detail && item.detail !== item.description ? ` · ${item.detail.slice(0, 60)}` : ''}</div>
