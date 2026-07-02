@@ -1701,6 +1701,119 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
+                  {/* Rents Due / Past Due — scans January through the current month (not just
+                      the current month) so an unpaid prior month, e.g. June rent still unpaid
+                      once July starts, keeps showing up here instead of silently disappearing. */}
+                  {(() => {
+                    const now = new Date();
+                    const currentYear = now.getFullYear();
+                    const currentMonthIdx = now.getMonth(); // 0-based
+                    const dayOfMonth = now.getDate();
+
+                    const rentProps = properties.filter(p =>
+                      ['occupied', 'lease-expired', 'month-to-month'].includes(
+                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
+                      ) && (parseFloat(p.monthlyRent) || 0) > 0
+                    );
+
+                    // Every (property, month) from Jan through this month with no paid/partial
+                    // rent recorded — mirrors the Reconcile tab's "Needs attention" logic so a
+                    // missed month stays flagged until it's actually paid, not until the month ends.
+                    const flags = [];
+                    for (let m = 0; m <= currentMonthIdx; m++) {
+                      const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
+                      rentProps.forEach(p => {
+                        // Any paid/partial record settles the month — a $0 'paid' record is the
+                        // deliberate "unit vacant, no rent due" marker (N. Elm Jan-Feb 2026).
+                        const monthRecords = rentPayments
+                          .filter(r => String(r.propertyId) === String(p.id)
+                            && (r.status === 'paid' || r.status === 'partial')
+                            && (r.month || r.datePaid || '').startsWith(monthKey));
+                        if (monthRecords.length === 0) {
+                          const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
+                          flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
+                        }
+                      });
+                    }
+
+                    if (flags.length === 0) return null;
+                    flags.sort((a, b) => a.monthIdx - b.monthIdx);
+                    const pastDueFlags = flags.filter(f => f.isPastDue);
+                    const dueFlags = flags.filter(f => !f.isPastDue);
+
+                    const renderRow = (f) => (
+                      <div key={`${f.property.id}-${f.monthKey}`}
+                        onClick={() => { setActiveSection('rent'); }}
+                        className={`w-full text-left p-3 rounded-2xl border transition cursor-pointer ${
+                          f.isPastDue
+                            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+                            : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm flex-shrink-0">{f.property.emoji || '🏠'}</span>
+                            <span className={`text-sm font-medium truncate ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
+                            <span className="text-[11px] text-white/30 flex-shrink-0">
+                              {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
+                              {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAddRentModal({
+                                  incomeType: 'rent',
+                                  propertyId: f.property.id,
+                                  propertyName: `${f.property.emoji || '🏠'} ${f.property.name}`,
+                                  tenantName: getPropertyTenants(f.property).map(t => t.name).filter(Boolean).join(', '),
+                                  month: f.monthKey,
+                                  amount: parseFloat(f.property.monthlyRent) || '',
+                                  status: 'paid',
+                                });
+                              }}
+                              className={`px-3 py-1 rounded-lg text-white text-xs font-semibold transition ${
+                                f.isPastDue ? 'bg-red-500/90 hover:bg-red-500' : 'bg-emerald-500/90 hover:bg-emerald-500'
+                              }`}
+                            >
+                              Record
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <div className="mb-6">
+                        {pastDueFlags.length > 0 && (
+                          <div className="mb-3">
+                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                              Rents Past Due{pastDueFlags.length > 1 ? ` (${pastDueFlags.length})` : ''}
+                            </h3>
+                            <div className="space-y-2">
+                              {pastDueFlags.map(renderRow)}
+                            </div>
+                          </div>
+                        )}
+                        {dueFlags.length > 0 && (
+                          <div>
+                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                              Rents Due — {now.toLocaleString('en-US', { month: 'long' })}
+                            </h3>
+                            <div className="space-y-2">
+                              {dueFlags.map(renderRow)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+
+
                   {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
                   {canManage && (
                     <CardInbox
@@ -1909,117 +2022,6 @@ export default function RainbowRentals() {
                       </div>
                     </div>
                   )}
-
-                  {/* Rents Due / Past Due — scans January through the current month (not just
-                      the current month) so an unpaid prior month, e.g. June rent still unpaid
-                      once July starts, keeps showing up here instead of silently disappearing. */}
-                  {(() => {
-                    const now = new Date();
-                    const currentYear = now.getFullYear();
-                    const currentMonthIdx = now.getMonth(); // 0-based
-                    const dayOfMonth = now.getDate();
-
-                    const rentProps = properties.filter(p =>
-                      ['occupied', 'lease-expired', 'month-to-month'].includes(
-                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-                      ) && (parseFloat(p.monthlyRent) || 0) > 0
-                    );
-
-                    // Every (property, month) from Jan through this month with no paid/partial
-                    // rent recorded — mirrors the Reconcile tab's "Needs attention" logic so a
-                    // missed month stays flagged until it's actually paid, not until the month ends.
-                    const flags = [];
-                    for (let m = 0; m <= currentMonthIdx; m++) {
-                      const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
-                      rentProps.forEach(p => {
-                        // Any paid/partial record settles the month — a $0 'paid' record is the
-                        // deliberate "unit vacant, no rent due" marker (N. Elm Jan-Feb 2026).
-                        const monthRecords = rentPayments
-                          .filter(r => String(r.propertyId) === String(p.id)
-                            && (r.status === 'paid' || r.status === 'partial')
-                            && (r.month || r.datePaid || '').startsWith(monthKey));
-                        if (monthRecords.length === 0) {
-                          const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
-                          flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
-                        }
-                      });
-                    }
-
-                    if (flags.length === 0) return null;
-                    flags.sort((a, b) => a.monthIdx - b.monthIdx);
-                    const pastDueFlags = flags.filter(f => f.isPastDue);
-                    const dueFlags = flags.filter(f => !f.isPastDue);
-
-                    const renderRow = (f) => (
-                      <div key={`${f.property.id}-${f.monthKey}`}
-                        onClick={() => { setActiveSection('rent'); }}
-                        className={`w-full text-left p-3 rounded-2xl border transition cursor-pointer ${
-                          f.isPastDue
-                            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                            : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm flex-shrink-0">{f.property.emoji || '🏠'}</span>
-                            <span className={`text-sm font-medium truncate ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
-                            <span className="text-[11px] text-white/30 flex-shrink-0">
-                              {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
-                              {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAddRentModal({
-                                  incomeType: 'rent',
-                                  propertyId: f.property.id,
-                                  propertyName: `${f.property.emoji || '🏠'} ${f.property.name}`,
-                                  tenantName: getPropertyTenants(f.property).map(t => t.name).filter(Boolean).join(', '),
-                                  month: f.monthKey,
-                                  amount: parseFloat(f.property.monthlyRent) || '',
-                                  status: 'paid',
-                                });
-                              }}
-                              className={`px-3 py-1 rounded-lg text-white text-xs font-semibold transition ${
-                                f.isPastDue ? 'bg-red-500/90 hover:bg-red-500' : 'bg-emerald-500/90 hover:bg-emerald-500'
-                              }`}
-                            >
-                              Record
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-
-                    return (
-                      <div className="mb-6">
-                        {pastDueFlags.length > 0 && (
-                          <div className="mb-3">
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Past Due{pastDueFlags.length > 1 ? ` (${pastDueFlags.length})` : ''}
-                            </h3>
-                            <div className="space-y-2">
-                              {pastDueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
-                        {dueFlags.length > 0 && (
-                          <div>
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Due — {now.toLocaleString('en-US', { month: 'long' })}
-                            </h3>
-                            <div className="space-y-2">
-                              {dueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
 
                   {/* Lease Alerts — Expired or Expiring Within 30 Days */}
                   {(() => {
