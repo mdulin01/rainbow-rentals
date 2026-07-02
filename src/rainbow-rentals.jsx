@@ -3,18 +3,17 @@ import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3
 
 // Constants and utilities
 import {
-  ownerEmails, propertyAccess, propertyTypes, propertyColors, documentTypes,
+  ownerEmails, propertyTypes, propertyColors, documentTypes,
   expenseCategories, incomeCategories, taskPriorities, timeHorizons,
   listCategories, ideaCategories, tenantStatuses, rentStatuses
 } from './constants';
 import {
   formatDate, formatCurrency, validateFileSize, isHeicFile, getSafeFileName,
-  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus, todayLocalStr
+  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus
 } from './utils';
 
 // Components
 import LoginScreen from './components/LoginScreen';
-import RupertBanner from './components/RupertBanner';
 import ConfirmDialog from './components/ConfirmDialog';
 
 // Hub components (tasks still used on Dashboard)
@@ -51,7 +50,6 @@ import RentReconciliation from './components/Rent/RentReconciliation';
 // Expenses components
 import ExpensesList from './components/Expenses/ExpensesList';
 import AddExpenseModal from './components/Expenses/AddExpenseModal';
-import CardInbox from './components/Expenses/CardInbox';
 
 // Documents components
 import DocumentCard from './components/Documents/DocumentCard';
@@ -79,8 +77,7 @@ import BuildInfo from './components/BuildInfo';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
-import { requestPushToken } from './messaging';
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
 
@@ -127,23 +124,6 @@ export default function RainbowRentals() {
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
-  const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
-  const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
-  const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
-  const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
-  const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
-  const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
-  const [dashboardReportYear, setDashboardReportYear] = useState(new Date().getFullYear());
-  const enableAlerts = async () => {
-    const r = await requestPushToken();
-    if (r.ok && user) {
-      try {
-        await setDoc(doc(db, 'pushTokens', user.uid), { uid: user.uid, email: user.email || '', token: r.token, updatedAt: new Date().toISOString() }, { merge: true });
-        setPushState('granted');
-        showToast && showToast('Alerts on for this device 🔔', 'success');
-      } catch (e) { showToast && showToast('Token save failed: ' + e.message, 'error'); }
-    } else { showToast && showToast('Could not enable alerts: ' + (r.reason || 'error'), 'error'); }
-  };
 
   // Search
   const [showSearch, setShowSearch] = useState(false);
@@ -164,7 +144,7 @@ export default function RainbowRentals() {
   // ========== HOOKS ==========
   const sharedHub = useSharedHub(currentUser, saveSharedHubRef.current, showToast);
   const {
-    sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
+    sharedTasks, sharedLists, sharedIdeas,
     addTask, updateTask, deleteTask, completeTask, highlightTask,
     addList, updateList, deleteList, addListItem, toggleListItem, deleteListItem, highlightList,
     addIdea, updateIdea, deleteIdea, highlightIdea,
@@ -179,7 +159,7 @@ export default function RainbowRentals() {
 
   const propertiesHook = useProperties(currentUser, savePropertiesRef.current, showToast);
   const {
-    properties: _allProperties, setProperties,
+    properties, setProperties,
     selectedProperty, setSelectedProperty,
     propertyViewMode, setPropertyViewMode,
     showNewPropertyModal, setShowNewPropertyModal,
@@ -189,7 +169,7 @@ export default function RainbowRentals() {
 
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
   const {
-    documents: _allDocuments, setDocuments,
+    documents, setDocuments,
     documentViewMode, setDocumentViewMode,
     documentTypeFilter, setDocumentTypeFilter,
     documentPropertyFilter, setDocumentPropertyFilter,
@@ -199,7 +179,7 @@ export default function RainbowRentals() {
 
   const financialsHook = useFinancials(currentUser, saveFinancialsRef.current, showToast);
   const {
-    transactions: _allTxns, setTransactions,
+    transactions, setTransactions,
     financialViewMode, setFinancialViewMode,
     transactionTypeFilter, setTransactionTypeFilter,
     transactionPropertyFilter, setTransactionPropertyFilter,
@@ -210,7 +190,7 @@ export default function RainbowRentals() {
 
   const rentHook = useRent(currentUser, saveRentRef.current, showToast);
   const {
-    rentPayments: _allRent, setRentPayments,
+    rentPayments, setRentPayments,
     showAddRentModal, setShowAddRentModal,
     addRentPayment, updateRentPayment, deleteRentPayment,
   } = rentHook;
@@ -218,26 +198,34 @@ export default function RainbowRentals() {
   // Pass db directly — hook saves to Firestore internally, no ref indirection
   const expensesHook = useExpenses(db, currentUser, showToast);
   const {
-    expenses: _allExpenses, setExpenses,
+    expenses, setExpenses,
     showAddExpenseModal, setShowAddExpenseModal,
     addExpense, updateExpense, deleteExpense,
   } = expensesHook;
 
-  // ---- Per-property owner access (e.g. Adam → only Brookhurst). Single choke-point:
-  // every downstream `properties/rentPayments/expenses/documents/transactions/sharedTasks`
-  // is the filtered view for a restricted owner; full managers (no match) see everything. ----
-  const _accessMatch = propertyAccess[(user?.email || '').toLowerCase()];
-  const canManage = !_accessMatch; // Mike/Liam can edit rents/leases/expenses; restricted owners can't
-  const _match = (p) => `${p.name || ''} ${p.address || ''}`.toLowerCase().includes(_accessMatch);
-  const properties = _accessMatch ? _allProperties.filter(_match) : _allProperties;
-  const _visibleIds = new Set(properties.map((p) => String(p.id)));
-  const _inScope = (pid) => _visibleIds.has(String(pid));
-  const rentPayments = _accessMatch ? _allRent.filter((r) => _inScope(r.propertyId)) : _allRent;
-  const expenses = _accessMatch ? _allExpenses.filter((e) => _inScope(e.propertyId)) : _allExpenses;
-  const documents = _accessMatch ? _allDocuments.filter((d) => _inScope(d.propertyId)) : _allDocuments;
-  const transactions = _accessMatch ? _allTxns.filter((t) => _inScope(t.propertyId)) : _allTxns;
-  const sharedTasks = _accessMatch ? _allTasks.filter((t) => _inScope(t.linkedTo?.propertyId)) : _allTasks;
-  const sharedLists = _accessMatch ? _allLists.filter((l) => _inScope(l.linkedTo?.itemId)) : _allLists;
+  // Expense-review queue pushed by mikes-money (bank-detected Liam expenses +
+  // Mike's rental-tagged transactions). Approve → expense record; dismiss → ignored.
+  const [expenseReviewItems, setExpenseReviewItems] = useState([]);
+  const saveExpenseReview = useCallback(async (items) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'rentalData', 'expenseReview'), JSON.parse(JSON.stringify({
+        items,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: currentUser || 'unknown',
+      })), { merge: true });
+    } catch (error) {
+      console.error('Error saving expense review:', error);
+      showToast('Failed to save review decision.', 'error');
+    }
+  }, [user, currentUser, showToast]);
+  const resolveReviewItem = useCallback((itemId, patch) => {
+    setExpenseReviewItems(prev => {
+      const updated = prev.map(i => i.id === itemId ? { ...i, ...patch, resolvedAt: new Date().toISOString(), resolvedBy: currentUser || 'unknown' } : i);
+      saveExpenseReview(updated);
+      return updated;
+    });
+  }, [saveExpenseReview, currentUser]);
 
   const ownershipHook = useOwnership(currentUser, saveOwnershipRef.current, showToast);
   const {
@@ -472,6 +460,18 @@ export default function RainbowRentals() {
       (error) => console.error('Error loading rent data:', error)
     );
 
+    // Subscribe to the expense-review queue (pushed by mikes-money)
+    const expenseReviewUnsubscribe = onSnapshot(
+      doc(db, 'rentalData', 'expenseReview'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.items) setExpenseReviewItems(data.items);
+        }
+      },
+      (error) => console.error('Error loading expense review data:', error)
+    );
+
     // Subscribe to expenses
     const expensesUnsubscribe = onSnapshot(
       doc(db, 'rentalData', 'expenses'),
@@ -516,60 +516,11 @@ export default function RainbowRentals() {
       documentsUnsubscribe();
       financialsUnsubscribe();
       rentUnsubscribe();
+      expenseReviewUnsubscribe();
       expensesUnsubscribe();
       ownershipUnsubscribe();
     };
   }, [user]);
-
-  // Bank-deposit reconcile slice written by the mikeslife bridge cron.
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(doc(db, 'rentalData', 'incomeActuals'),
-      (snap) => { if (snap.exists()) setIncomeActuals(snap.data()); },
-      (e) => console.error('incomeActuals load:', e));
-    return () => unsub();
-  }, [user]);
-
-  // Citi •4793 confirm-inbox slice written by the mikeslife bridge cron.
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(doc(db, 'rentalData', 'cardInbox'),
-      (snap) => { if (snap.exists()) setCardInbox(snap.data()); },
-      (e) => console.error('cardInbox load:', e));
-    return () => unsub();
-  }, [user]);
-
-  // Liam confirms a card charge → create a linked expense (the bridge tags the
-  // mikesmoney txn on its next run; moneyTxnId prevents a duplicate).
-  // Durably drop a charge from the inbox doc so it doesn't reappear on reload
-  // before the next bridge run (which also reconciles via expense links / dismissed).
-  const removeInboxItem = async (txnId, extra = {}) => {
-    setHandledInboxIds((prev) => [...prev, txnId]);
-    const remaining = (cardInbox?.items || []).filter((it) => it.txnId !== txnId);
-    try { await setDoc(doc(db, 'rentalData', 'cardInbox'), { items: remaining, ...extra }, { merge: true }); }
-    catch (e) { showToast && showToast('Sync issue: ' + e.message, 'error'); }
-  };
-  const confirmCardCharge = async (item, { propertyId, propertyName, category, reason }) => {
-    addExpense({
-      propertyId: propertyId || '',
-      propertyName: propertyName || '',
-      category: category || 'maintenance',
-      description: reason || item.merchant || 'Card expense',
-      amount: item.amount,
-      date: item.date,
-      vendor: item.merchant || '',
-      notes: '',
-      receiptPhoto: '',
-      paidWith: 'citi',
-      source: 'citi-4793',
-      moneyTxnId: item.txnId,
-      moneyMatch: 'matched',
-    });
-    await removeInboxItem(item.txnId);
-  };
-  const dismissCardCharge = async (item) => {
-    await removeInboxItem(item.txnId, { dismissed: arrayUnion(item.txnId) });
-  };
 
   // ========== AUTO-CREATE RECURRING EXPENSES ==========
   // Uses a Firestore TRANSACTION to atomically read-modify-write.
@@ -773,7 +724,7 @@ export default function RainbowRentals() {
   const todayTasks = pendingTasks.filter(isTaskDueToday);
   const overdueTasks = pendingTasks.filter(t => {
     if (!t.dueDate) return false;
-    const today = todayLocalStr();
+    const today = new Date().toISOString().split('T')[0];
     return t.dueDate < today;
   });
 
@@ -808,7 +759,7 @@ export default function RainbowRentals() {
         <RainbowBar />
 
         {/* Header */}
-        <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Mobile: section name with dropdown */}
@@ -933,8 +884,6 @@ export default function RainbowRentals() {
           )}
         </header>
 
-        <RupertBanner db={db} accent="#fb7185" />
-
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 py-4 pb-32">
           {dataLoading ? (
@@ -948,7 +897,6 @@ export default function RainbowRentals() {
                 <RentReconciliation
                   properties={properties}
                   rentPayments={rentPayments}
-                  incomeActuals={incomeActuals}
                   getEffectiveStatus={getEffectiveStatus}
                   onRecordRent={(prop, monthKey, cell) => {
                     const shortfall = cell && cell.state === 'short' ? (cell.expected - cell.received) : null;
@@ -974,20 +922,18 @@ export default function RainbowRentals() {
                     const now = new Date();
                     const currentYear = now.getFullYear();
                     const currentMonthIdx = now.getMonth(); // 0-based
-                    const reportYear = dashboardReportYear;
-                    const isCurrentYear = reportYear === currentYear;
                     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
                     // State-like behavior using a data attribute on the container
                     // We'll use a simple approach: store selected month in a ref-like pattern
-                    const reportMonth = dashboardReportMonth ?? (isCurrentYear ? currentMonthIdx : 12); // null = current month, 12 = YTD/full year
+                    const reportMonth = dashboardReportMonth ?? currentMonthIdx; // null = current month, 12 = YTD
                     const isYTD = reportMonth === 12;
-                    const selectedMonthLabel = isYTD ? (isCurrentYear ? `${reportYear} Year-to-Date` : `${reportYear} Full Year`) : `${monthNames[reportMonth]} ${reportYear}`;
+                    const selectedMonthLabel = isYTD ? `${currentYear} Year-to-Date` : `${monthNames[reportMonth]} ${currentYear}`;
 
                     // Build prefix filter for date matching
                     const getDateFilter = (monthIdx) => {
-                      if (monthIdx === 12) return String(reportYear); // YTD / full year
-                      return `${reportYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+                      if (monthIdx === 12) return String(currentYear); // YTD
+                      return `${currentYear}-${String(monthIdx + 1).padStart(2, '0')}`;
                     };
                     const datePrefix = getDateFilter(reportMonth);
 
@@ -1058,24 +1004,12 @@ export default function RainbowRentals() {
                     const fmtShort = (v) => v === 0 ? '—' : formatCurrency(v);
 
                     return (
-                      <div id="pnl-print" className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
+                      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6">
                         {/* Header */}
-                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                        <div className="flex items-center justify-between mb-3">
                           <h3 className="text-base font-bold text-white">
-                            P&amp;L Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
+                            Monthly Report <span className="font-normal text-white/50">— {selectedMonthLabel}</span>
                           </h3>
-                          <div className="flex items-center gap-2 no-print">
-                            <div className="flex items-center gap-1 bg-white/[0.06] rounded-lg px-1 py-0.5">
-                              <button onClick={() => setDashboardReportYear((y) => Math.max(2020, y - 1))}
-                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm">‹</button>
-                              <span className="text-sm font-semibold text-white px-1 tabular-nums">{reportYear}</span>
-                              <button onClick={() => setDashboardReportYear((y) => Math.min(currentYear, y + 1))}
-                                disabled={reportYear >= currentYear}
-                                className="px-2 py-1 rounded text-white/70 hover:bg-white/10 text-sm disabled:opacity-30">›</button>
-                            </div>
-                            <button onClick={() => window.print()}
-                              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold">🖨 Print / PDF</button>
-                          </div>
                         </div>
 
                         {/* Month tabs */}
@@ -1086,7 +1020,7 @@ export default function RainbowRentals() {
                               className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${
                                 reportMonth === idx
                                   ? 'bg-amber-500 text-slate-900'
-                                  : (!isCurrentYear || idx <= currentMonthIdx)
+                                  : idx <= currentMonthIdx
                                     ? 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12]'
                                     : 'bg-white/[0.03] text-white/25'
                               }`}
@@ -1256,7 +1190,7 @@ export default function RainbowRentals() {
                   {/* Quick link to Action Items if there are pending tasks or active checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
                     );
                     const pendingCount = sharedTasks.filter(t => t.status !== 'done').length;
                     const checklistCount = activeChecklists.length;
@@ -1540,28 +1474,54 @@ export default function RainbowRentals() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
-                  {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
-                  {canManage && (
-                    <CardInbox
-                      items={(cardInbox?.items || []).filter((it) => !handledInboxIds.includes(it.txnId))}
-                      properties={properties}
-                      onConfirm={confirmCardCharge}
-                      onDismiss={dismissCardCharge}
-                    />
-                  )}
+                  {/* Expense review queue — bank-detected Liam expenses + Mike's rental-tagged txns, pushed from Mike's Money */}
+                  {(() => {
+                    const pending = expenseReviewItems.filter(i => i.status === 'pending');
+                    if (pending.length === 0) return null;
+                    return (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                          💳 Expenses to Review ({pending.length}) <span className="normal-case font-normal text-white/30">— from Mike's Money bank data</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {pending.map(item => (
+                            <ExpenseReviewCard
+                              key={item.id}
+                              item={item}
+                              properties={properties}
+                              onApprove={(patch) => {
+                                const prop = properties.find(p => String(p.id) === String(patch.propertyId));
+                                addExpense({
+                                  id: `rev-${item.id}`,
+                                  propertyId: patch.propertyId || '',
+                                  propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
+                                  category: patch.category,
+                                  description: item.description + (item.reason === 'liam' ? ' (Liam)' : ''),
+                                  amount: item.amount,
+                                  date: item.date,
+                                  source: 'mikes-money-review',
+                                });
+                                resolveReviewItem(item.id, { status: 'approved', propertyId: patch.propertyId, category: patch.category });
+                              }}
+                              onDismiss={() => resolveReviewItem(item.id, { status: 'dismissed' })}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-white/30 mt-2">
+                          Approve = recorded as a rental expense (shows in Expenses + Schedule E). Dismiss = not a rental expense (personal etc.).
+                        </p>
+                      </div>
+                    );
+                  })()}
 
-                  {/* ---- Liam's weekly update card (managers only) ---- */}
-                  {canManage && (() => {
+                  {/* Rents Due / Past Due */}
+                  {(() => {
                     const now = new Date();
                     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                    // ISO week label
-                    const dt = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-                    const dayNum = (dt.getUTCDay() + 6) % 7; dt.setUTCDate(dt.getUTCDate() - dayNum + 3);
-                    const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
-                    const weekNo = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
-                    const weekId = `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+                    const dayOfMonth = now.getDate();
+                    const monthLabel = now.toLocaleString('en-US', { month: 'long' });
 
+                    // Find rented properties that haven't paid this month
                     const rentedProps = properties.filter(p =>
                       ['occupied', 'lease-expired', 'month-to-month'].includes(
                         p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
@@ -1574,189 +1534,35 @@ export default function RainbowRentals() {
                     );
                     const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
 
-                    const sendDone = async () => {
-                      const at = new Date().toISOString();
-                      setWeeklySentAt(at);
-                      try {
-                        await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
-                          week: weekId, by: currentUser || 'Liam', at,
-                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked },
-                          mikeNotified: false, // push layer flips this when Mike is alerted
-                        }, { merge: true });
-                        // Ping Mike instantly via mikeslife (his real push token); the daily cron is a backstop.
-                        try { fetch('https://mikeslife.app/api/liam-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {}); } catch (_) { /* best effort */ }
-                        showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
-                      } catch (e) { showToast && showToast('Saved locally — sync issue: ' + e.message, 'error'); }
-                    };
-
-                    return (
-                      <div className="mb-6 rounded-2xl border border-indigo-400/30 bg-gradient-to-br from-indigo-500/15 to-purple-500/10 p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="text-white font-bold">🗓️ This week's update</h3>
-                          <span className="text-xs text-white/50">{weekId}</span>
-                        </div>
-                        <p className="text-sm text-white/60 mb-3">Record rents, any lease changes, and expenses — then tap <b>Done &amp; send</b>.</p>
-
-                        {/* Rents to record */}
-                        <div className="mb-3">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">💰 Rents to record {unpaidProps.length > 0 && `(${unpaidProps.length})`}</div>
-                          {unpaidProps.length === 0 ? (
-                            <div className="text-sm text-emerald-400/90">All rents recorded for {now.toLocaleString('en-US', { month: 'long' })} ✓</div>
-                          ) : unpaidProps.map(p => (
-                            <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                              <span className="text-sm text-white/85">{p.emoji || '🏠'} {p.name} <span className="text-white/45">· {formatCurrency(parseFloat(p.monthlyRent) || 0)}</span></span>
-                              <button
-                                onClick={() => setShowAddRentModal({ propertyId: p.id, propertyName: p.name, amount: parseFloat(p.monthlyRent) || '', month: currentMonth, datePaid: todayStr, status: 'paid', incomeType: 'rent' })}
-                                className="px-3 py-1 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold">Record</button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Lease + expense quick actions */}
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          <button onClick={() => setShowTenantModal({ _pickProperty: true })}
-                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">📝 Update a lease</button>
-                          <button onClick={() => setShowAddExpenseModal('create')}
-                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
-                        </div>
-
-                        {/* Action item: update rents in Avail */}
-                        <button onClick={() => setAvailChecked(v => !v)}
-                          className="w-full flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-left">
-                          <span className={`flex-shrink-0 w-5 h-5 rounded-md border flex items-center justify-center text-xs ${availChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-white/30 text-transparent'}`}>✓</span>
-                          <span className="text-sm text-white/85">🔑 Update rent payments in <b>Avail</b></span>
-                        </button>
-
-                        {/* This week's to-dos (shared tasks) */}
-                        <div className="mb-3">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">✅ This week's to-dos {pendingTasks.length > 0 && `(${pendingTasks.length})`}</div>
-                          {pendingTasks.length === 0 ? (
-                            <div className="text-sm text-white/50">No open to-dos.</div>
-                          ) : pendingTasks.slice(0, 8).map(t => (
-                            <div key={t.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                              <span className="text-sm text-white/85 min-w-0 truncate pr-2">{t.title}{t.dueDate ? <span className="text-white/40"> · due {t.dueDate}</span> : null}</span>
-                              <button onClick={() => completeTask(t.id)}
-                                className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-emerald-500/80 text-white text-xs font-semibold">Done</button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {pushState !== 'granted' && (
-                          <button onClick={enableAlerts} className="w-full mb-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">🔔 Enable weekly reminders on this device</button>
-                        )}
-                        {weeklySentAt
-                          ? <div className="text-center text-sm text-emerald-400 font-semibold py-1">✓ Sent — Mike will be notified to pay you.</div>
-                          : <button onClick={sendDone} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:opacity-90 text-white font-bold">✅ Done &amp; send</button>}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Rents Due / Past Due — scans January through the current month (not just
-                      the current month) so an unpaid prior month, e.g. June rent still unpaid
-                      once July starts, keeps showing up here instead of silently disappearing. */}
-                  {(() => {
-                    const now = new Date();
-                    const currentYear = now.getFullYear();
-                    const currentMonthIdx = now.getMonth(); // 0-based
-                    const dayOfMonth = now.getDate();
-
-                    const rentProps = properties.filter(p =>
-                      ['occupied', 'lease-expired', 'month-to-month'].includes(
-                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-                      ) && (parseFloat(p.monthlyRent) || 0) > 0
-                    );
-
-                    // Every (property, month) from Jan through this month with no paid/partial
-                    // rent recorded — mirrors the Reconcile tab's "Needs attention" logic so a
-                    // missed month stays flagged until it's actually paid, not until the month ends.
-                    const flags = [];
-                    for (let m = 0; m <= currentMonthIdx; m++) {
-                      const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
-                      rentProps.forEach(p => {
-                        const received = rentPayments
-                          .filter(r => String(r.propertyId) === String(p.id)
-                            && (r.status === 'paid' || r.status === 'partial')
-                            && (r.datePaid || r.month || '').startsWith(monthKey))
-                          .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-                        if (received === 0) {
-                          const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
-                          flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
-                        }
-                      });
-                    }
-
-                    if (flags.length === 0) return null;
-                    flags.sort((a, b) => a.monthIdx - b.monthIdx);
-                    const pastDueFlags = flags.filter(f => f.isPastDue);
-                    const dueFlags = flags.filter(f => !f.isPastDue);
-
-                    const renderRow = (f) => (
-                      <div key={`${f.property.id}-${f.monthKey}`}
-                        onClick={() => { setActiveSection('rent'); }}
-                        className={`w-full text-left p-3 rounded-2xl border transition cursor-pointer ${
-                          f.isPastDue
-                            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                            : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm flex-shrink-0">{f.property.emoji || '🏠'}</span>
-                            <span className={`text-sm font-medium truncate ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
-                            <span className="text-[11px] text-white/30 flex-shrink-0">
-                              {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
-                              {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAddRentModal({
-                                  incomeType: 'rent',
-                                  propertyId: f.property.id,
-                                  propertyName: `${f.property.emoji || '🏠'} ${f.property.name}`,
-                                  tenantName: getPropertyTenants(f.property).map(t => t.name).filter(Boolean).join(', '),
-                                  month: f.monthKey,
-                                  amount: parseFloat(f.property.monthlyRent) || '',
-                                  status: 'paid',
-                                });
-                              }}
-                              className={`px-3 py-1 rounded-lg text-white text-xs font-semibold transition ${
-                                f.isPastDue ? 'bg-red-500/90 hover:bg-red-500' : 'bg-emerald-500/90 hover:bg-emerald-500'
-                              }`}
-                            >
-                              Record
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-
+                    if (unpaidProps.length === 0) return null;
+                    const isPastDue = dayOfMonth > 5;
                     return (
                       <div className="mb-6">
-                        {pastDueFlags.length > 0 && (
-                          <div className="mb-3">
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Past Due{pastDueFlags.length > 1 ? ` (${pastDueFlags.length})` : ''}
-                            </h3>
-                            <div className="space-y-2">
-                              {pastDueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
-                        {dueFlags.length > 0 && (
-                          <div>
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Due — {now.toLocaleString('en-US', { month: 'long' })}
-                            </h3>
-                            <div className="space-y-2">
-                              {dueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
+                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                          {isPastDue ? 'Rents Past Due' : 'Rents Due'} — {monthLabel}
+                        </h3>
+                        <div className="space-y-2">
+                          {unpaidProps.map(p => (
+                            <button key={p.id}
+                              onClick={() => { setActiveSection('rent'); }}
+                              className={`w-full text-left p-3 rounded-2xl border transition ${
+                                isPastDue
+                                  ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+                                  : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">{p.emoji || '🏠'}</span>
+                                  <span className={`text-sm font-medium ${isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{p.name}</span>
+                                </div>
+                                <span className={`text-sm font-bold ${isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
+                                  {formatCurrency(parseFloat(p.monthlyRent) || 0)}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     );
                   })()}
@@ -1822,16 +1628,16 @@ export default function RainbowRentals() {
                   {/* Active Move-In/Move-Out Checklists */}
                   {(() => {
                     const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
+                      (l.category === 'move-in' || l.category === 'move-out') && l.status !== 'archived'
                     );
                     return (
                       <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Properties</h3>
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Checklists</h3>
                           <button onClick={() => setShowChecklistInitModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ New</button>
                         </div>
                         {activeChecklists.length === 0 ? (
-                          <p className="text-center text-white/30 py-6">No active properties</p>
+                          <p className="text-center text-white/30 py-6">No active checklists</p>
                         ) : (
                           <div className="space-y-2">
                             {activeChecklists.map(list => {
@@ -2487,13 +2293,86 @@ export default function RainbowRentals() {
           </div>
         )}
 
+        {/* Desktop FAB */}
+        {isOwner && !anyModalOpen && (
+          <div className="hidden md:block fixed top-24 left-6 z-[90]">
+            {showAddNewMenu && (
+              <>
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[89]" onClick={() => setShowAddNewMenu(false)} />
+                <div className="absolute top-16 left-0 z-[91] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
+                  style={{ animation: 'fabGridIn 0.15s ease-out both' }}>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
+                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Income', gradient: 'from-emerald-400 to-green-500' },
+                      { action: () => setShowAddExpenseModal('create'), icon: '💸', label: 'Expense', gradient: 'from-red-400 to-rose-500' },
+                      { action: () => setShowSharedListModal('create'), icon: '📝', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
+                    ].map((item, idx) => (
+                      <button key={item.label} onClick={() => { setShowAddNewMenu(false); item.action(); }}
+                        className="flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl hover:bg-white/10 transition active:scale-95"
+                        style={{ animation: `fabItemIn 0.12s ease-out ${idx * 0.02}s both` }}>
+                        <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-xl shadow-md`}>{item.icon}</span>
+                        <span className="text-[11px] text-white/70 font-medium leading-tight">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <style>{`
+                  @keyframes fabGridIn { from { opacity: 0; transform: scale(0.9) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+                  @keyframes fabItemIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+                `}</style>
+              </>
+            )}
+            <button onClick={() => setShowAddNewMenu(!showAddNewMenu)}
+              className={`w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all duration-200 active:scale-90 ${
+                showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600 hover:shadow-purple-500/30'
+              }`}
+              style={{ boxShadow: showAddNewMenu ? '0 8px 32px rgba(236,72,153,0.4)' : '0 8px 32px rgba(139,92,246,0.4)' }}>
+              <Plus className="w-6 h-6 text-white transition-transform duration-200" />
+            </button>
+          </div>
+        )}
+
         {/* Mobile Bottom Navigation with FAB */}
         {!anyModalOpen && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[100]" style={{ transform: 'translateZ(0)' }}>
+            {/* FAB Menu Popup */}
+            {showAddNewMenu && isOwner && (
+              <>
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99]" onClick={() => setShowAddNewMenu(false)} />
+                <div className="fixed right-4 z-[101] bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl w-[240px]"
+                  style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 132px)', animation: 'fabGridUp 0.2s cubic-bezier(0.16,1,0.3,1) both', transformOrigin: 'bottom right' }}>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { action: () => setShowAddTaskModal('create'), icon: '✅', label: 'Task', gradient: 'from-blue-400 to-indigo-500' },
+                      { action: () => setShowAddRentModal('create'), icon: '💰', label: 'Income', gradient: 'from-emerald-400 to-green-500' },
+                      { action: () => setShowAddExpenseModal('create'), icon: '💸', label: 'Expense', gradient: 'from-red-400 to-rose-500' },
+                      { action: () => setShowSharedListModal('create'), icon: '📝', label: 'List', gradient: 'from-emerald-400 to-teal-500' },
+                    ].map((item, idx) => {
+                      const row = Math.floor(idx / 2);
+                      const delay = (1 - row) * 0.04 + (idx % 2) * 0.015;
+                      return (
+                        <button key={item.label} onClick={() => { setShowAddNewMenu(false); item.action(); }}
+                          className="flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl hover:bg-white/10 transition active:scale-95"
+                          style={{ animation: `fabItemUp 0.25s cubic-bezier(0.16,1,0.3,1) ${delay}s both` }}>
+                          <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-xl shadow-md`}>{item.icon}</span>
+                          <span className="text-[11px] text-white/70 font-medium leading-tight">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <style>{`
+                  @keyframes fabGridUp { from { opacity: 0; transform: translateX(-50%) scaleY(0.3) scaleX(0.8) translateY(20px); } to { opacity: 1; transform: translateX(-50%) scaleY(1) scaleX(1) translateY(0); } }
+                  @keyframes fabItemUp { from { opacity: 0; transform: translateY(12px) scale(0.7); } to { opacity: 1; transform: translateY(0) scale(1); } }
+                `}</style>
+              </>
+            )}
+
             {/* Nav bar */}
-            <div className="relative mx-auto w-fit max-w-[97vw] bg-slate-900/80 backdrop-blur-xl border border-slate-600/40 rounded-full shadow-2xl" style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
-              {/* Tab buttons — all sections, floating dock */}
-              <div className="flex items-end justify-around gap-0.5 px-2 pt-1 pb-1 overflow-x-auto">
+            <div className="relative bg-slate-900 border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+              {/* Tab buttons — all 6 sections */}
+              <div className="flex items-end justify-around px-1 pt-1 pb-1">
                 {[
                   { id: 'action-items', label: 'Actions', emoji: '✅', gradient: 'from-indigo-400 to-purple-500' },
                   { id: 'rentals', label: 'Props', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
@@ -2501,7 +2380,6 @@ export default function RainbowRentals() {
                   { id: 'rent', label: 'Income', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
                   { id: 'expenses', label: 'Costs', emoji: '💸', gradient: 'from-red-400 to-rose-500' },
                   { id: 'dashboard', label: 'Home', emoji: '📊', gradient: 'from-purple-500 to-violet-500' },
-                  { id: 'ownership', label: 'Own', emoji: '🤝', gradient: 'from-amber-400 to-yellow-500' },
                   { id: 'documents', label: 'Docs', emoji: '📄', gradient: 'from-amber-400 to-orange-500' },
                 ].map((section) => (
                   <button
@@ -2511,12 +2389,12 @@ export default function RainbowRentals() {
                       if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
                       setShowAddNewMenu(false);
                     }}
-                    className="relative flex flex-col items-center justify-center py-2 rounded-xl transition-all active:scale-95 min-w-[48px]"
+                    className="relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all active:scale-95 min-w-[44px]"
                   >
-                    <span className={`text-xl mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
+                    <span className={`text-base mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
                       {section.emoji}
                     </span>
-                    <span className={`text-[10px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
+                    <span className={`text-[9px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
                       {section.label}
                     </span>
                     {activeSection === section.id && (
@@ -2527,6 +2405,23 @@ export default function RainbowRentals() {
               </div>
             </div>
 
+            {/* FAB — floating above bottom nav on right side */}
+            {isOwner && (
+              <button
+                onClick={() => setShowAddNewMenu(!showAddNewMenu)}
+                className={`fixed right-4 z-[101] rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 ${
+                  showAddNewMenu ? 'bg-gradient-to-r from-pink-500 to-rose-500 rotate-45' : 'bg-gradient-to-r from-purple-500 to-violet-600'
+                }`}
+                style={{
+                  bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
+                  width: '3rem', height: '3rem',
+                  boxShadow: showAddNewMenu
+                    ? '0 4px 24px rgba(236,72,153,0.6)'
+                    : '0 4px 24px rgba(139,92,246,0.6)',
+                }}>
+                <Plus className="w-5 h-5 text-white transition-transform duration-200" />
+              </button>
+            )}
           </nav>
         )}
 
@@ -2539,5 +2434,48 @@ export default function RainbowRentals() {
         <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-orange-500 via-yellow-400 via-green-500 via-blue-500 to-purple-500 hidden md:block" />
       </div>
     </SharedHubProvider>
+  );
+}
+
+// Card for one pending expense-review item (pushed from Mike's Money bank data).
+// Pick property + category, then Approve → expense record, or Dismiss.
+function ExpenseReviewCard({ item, properties, onApprove, onDismiss }) {
+  const [propertyId, setPropertyId] = useState(item.suggestedPropertyId || '');
+  const [category, setCategory] = useState('repair');
+  return (
+    <div className="p-3 rounded-2xl border bg-sky-500/10 border-sky-500/20">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-sky-300 truncate">{item.description}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 shrink-0">
+              {item.reason === 'liam' ? '👷 Liam' : '🏘️ tagged rental'}
+            </span>
+          </div>
+          <div className="text-xs text-white/40 mt-0.5">{formatDate(item.date)}{item.detail && item.detail !== item.description ? ` · ${item.detail.slice(0, 60)}` : ''}</div>
+        </div>
+        <span className="text-sm font-bold text-sky-300 shrink-0">{formatCurrency(item.amount || 0)}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <select value={propertyId} onChange={e => setPropertyId(e.target.value)}
+          className="px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-sky-500/50">
+          <option value="">Property…</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.emoji || '🏠'} {p.name}</option>)}
+        </select>
+        <select value={category} onChange={e => setCategory(e.target.value)}
+          className="px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-sky-500/50">
+          {expenseCategories.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+        </select>
+        <div className="flex-1" />
+        <button onClick={() => onApprove({ propertyId, category })} disabled={!propertyId}
+          className="px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed">
+          ✓ Rental expense
+        </button>
+        <button onClick={onDismiss}
+          className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white/10 text-white/60 hover:bg-white/20">
+          ✕ Not rental
+        </button>
+      </div>
+    </div>
   );
 }
