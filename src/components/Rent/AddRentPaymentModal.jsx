@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
-import { todayLocalStr } from '../../utils';
 
 export default function AddRentPaymentModal({ payment, properties, onSave, onDelete, onClose }) {
   const isEditing = payment && payment.id;
@@ -16,33 +15,48 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
     amount: '',
     datePaid: '',
     status: 'paid',
-    method: '',
     notes: '',
+    lateFee: '',
   });
 
   useEffect(() => {
-    // Prefill from any provided payment object (editing OR a reconciliation prefill).
-    if (payment) {
-      const now = new Date();
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (isEditing) {
       setForm({
         incomeType: payment.incomeType || 'rent',
         propertyId: payment.propertyId || '',
         tenantName: payment.tenantName || '',
         propertyName: payment.propertyName || '',
         month: payment.month || '',
-        amount: payment.amount ?? '',
-        datePaid: payment.datePaid || todayLocalStr(),
+        amount: payment.amount || '',
+        datePaid: payment.datePaid || '',
         status: payment.status || 'paid',
-        method: payment.method || '',
         notes: payment.notes || '',
+        lateFee: '',
       });
+    } else if (payment) {
+      // Quick-record prefill (Action Items "Record" buttons pass property/month/amount
+      // WITHOUT an id) — previously discarded, which opened a blank current-month form
+      // and left the past-due row red after saving.
+      const prop = payment.propertyId ? properties.find(p => String(p.id) === String(payment.propertyId)) : null;
+      const tenants = prop ? getPropertyTenants(prop) : [];
+      setForm(f => ({
+        ...f,
+        incomeType: payment.incomeType || 'rent',
+        propertyId: payment.propertyId ? String(payment.propertyId) : '',
+        propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : (payment.propertyName || ''),
+        tenantName: tenants.map(t => t.name).filter(Boolean).join(', ') || '',
+        month: payment.month || currentMonth,
+        amount: payment.amount || (prop?.monthlyRent || ''),
+        datePaid: payment.datePaid || today,
+        status: payment.status || 'paid',
+      }));
     } else {
-      // Default month to current
-      const now = new Date();
-      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      setForm(f => ({ ...f, month: currentMonth, datePaid: todayLocalStr() }));
+      setForm(f => ({ ...f, month: currentMonth, datePaid: today }));
     }
-  }, [payment, isEditing]);
+  }, [payment, isEditing, properties]);
 
   // Auto-fill tenant/property name when property selected
   const handlePropertyChange = (propertyId) => {
@@ -180,6 +194,21 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
             />
           </div>
 
+          {/* Late fee — only for rent; saved as its own 'late-fee' income record */}
+          {isRentType && (
+            <div>
+              <label className="text-xs text-white/40 mb-1 block">Late fee <span className="text-white/20">(optional — recorded separately)</span></label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.lateFee}
+                onChange={e => setForm(f => ({ ...f, lateFee: e.target.value }))}
+                placeholder="0.00"
+                className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+          )}
+
           {/* Status — only for rent */}
           {isRentType && (
             <div>
@@ -197,27 +226,6 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
                   >{s.label}</button>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* How was rent paid? — only for rent */}
-          {isRentType && (
-            <div>
-              <label className="text-xs text-white/40 mb-1 block">How was it paid?</label>
-              <div className="grid grid-cols-3 gap-2">
-                {['Avail', 'Zelle', 'Money order', 'Check', 'Cash', 'Other'].map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setForm(f => ({ ...f, method: f.method === m ? '' : m }))}
-                    className={`px-2 py-2 rounded-xl text-xs font-medium transition border ${
-                      form.method === m
-                        ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-                        : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:bg-white/10'
-                    }`}
-                  >{m}</button>
-                ))}
-              </div>
-              <p className="text-[11px] text-white/30 mt-1">How the tenant paid this month (helps reconcile against the bank).</p>
             </div>
           )}
 

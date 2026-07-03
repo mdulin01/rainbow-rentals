@@ -1161,7 +1161,7 @@ export default function RainbowRentals() {
                       const pid = String(p.id);
                       // Income for this property
                       const income = rentPayments
-                        .filter(r => String(r.propertyId) === pid && (r.status === 'paid' || r.status === 'partial') && (r.month || r.datePaid || '').startsWith(datePrefix))
+                        .filter(r => String(r.propertyId) === pid && ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(datePrefix))
                         .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
 
                       // Expenses by category
@@ -1195,7 +1195,7 @@ export default function RainbowRentals() {
 
                     // General income (no property)
                     const generalIncome = rentPayments
-                      .filter(r => !r.propertyId && (r.status === 'paid' || r.status === 'partial') && (r.month || r.datePaid || '').startsWith(datePrefix))
+                      .filter(r => !r.propertyId && ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(datePrefix))
                       .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
 
                     // Totals
@@ -1337,7 +1337,7 @@ export default function RainbowRentals() {
                     );
                     const paidPropIds = new Set(
                       rentPayments
-                        .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.month || r.datePaid || '').startsWith(currentMonth))
+                        .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(currentMonth))
                         .map(r => String(r.propertyId))
                     );
                     const unpaidProps = properties.filter(p => rentedPropIds.has(String(p.id)) && !paidPropIds.has(String(p.id)));
@@ -1727,7 +1727,7 @@ export default function RainbowRentals() {
                         // deliberate "unit vacant, no rent due" marker (N. Elm Jan-Feb 2026).
                         const monthRecords = rentPayments
                           .filter(r => String(r.propertyId) === String(p.id)
-                            && (r.status === 'paid' || r.status === 'partial')
+                            && ['paid', 'partial', 'late'].includes(r.status)
                             && (r.month || r.datePaid || '').startsWith(monthKey));
                         if (monthRecords.length === 0) {
                           const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
@@ -1883,7 +1883,7 @@ export default function RainbowRentals() {
                     );
                     const paidPropIds = new Set(
                       rentPayments
-                        .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.month || r.datePaid || '').startsWith(currentMonth))
+                        .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(currentMonth))
                         .map(r => String(r.propertyId))
                     );
                     const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
@@ -1969,7 +1969,7 @@ export default function RainbowRentals() {
                   {canManage && (() => {
                     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
                     const recent = activityEvents.filter(e => e.at >= weekAgo);
-                    const rentsThisWeek = rentPayments.filter(r => (r.datePaid || '') >= weekAgo.slice(0, 10) && (r.status === 'paid' || r.status === 'partial'));
+                    const rentsThisWeek = rentPayments.filter(r => (r.datePaid || '') >= weekAgo.slice(0, 10) && ['paid', 'partial', 'late'].includes(r.status));
                     const rentTotal = rentsThisWeek.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
                     const expThisWeek = expenses.filter(e => (e.createdAt || '') >= weekAgo);
                     const expTotal = expThisWeek.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -2636,10 +2636,22 @@ export default function RainbowRentals() {
             payment={typeof showAddRentModal === 'object' ? showAddRentModal : null}
             properties={properties}
             onSave={(paymentData) => {
+              const { lateFee, ...payment } = paymentData;
               if (typeof showAddRentModal === 'object' && showAddRentModal.id) {
-                updateRentPayment(showAddRentModal.id, paymentData);
+                updateRentPayment(showAddRentModal.id, payment);
               } else {
-                addRentPayment({ ...paymentData, id: Date.now().toString(), createdAt: new Date().toISOString(), createdBy: currentUser });
+                addRentPayment({ ...payment, id: Date.now().toString(), createdAt: new Date().toISOString(), createdBy: currentUser });
+              }
+              // Optional late charge → its own income record (type 'late-fee') so rent
+              // reconciliation stays clean and the fee shows separately in Income.
+              if (parseFloat(lateFee) > 0) {
+                addRentPayment({
+                  incomeType: 'late-fee', propertyId: payment.propertyId, propertyName: payment.propertyName,
+                  tenantName: payment.tenantName || '', month: payment.month,
+                  description: `Late fee — ${payment.propertyName || ''} ${payment.month || ''}`.trim(),
+                  amount: parseFloat(lateFee), datePaid: payment.datePaid, status: 'paid',
+                  id: (Date.now() + 1).toString(), createdAt: new Date().toISOString(), createdBy: currentUser,
+                });
               }
               setShowAddRentModal(null);
             }}
