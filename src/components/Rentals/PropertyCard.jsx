@@ -18,11 +18,22 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
   const propId = String(property.id);
   const monthsElapsed = Math.max(1, new Date().getMonth() + 1);
 
-  const ytdExpenses = (expenses || [])
+  const propExpenses = (expenses || [])
     .filter(e => String(e.propertyId) === propId && e.isTemplate !== true)
-    .filter(e => e.date && e.date.startsWith(String(currentYear)))
+    .filter(e => e.date && e.date.startsWith(String(currentYear)));
+  const ytdExpenses = propExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  // Cash-flow math: the expense ledger ALREADY records mortgage payments (recurring
+  // templates), and the property record's mortgageMonthlyPayment is added separately
+  // below — so the monthly average must EXCLUDE mortgage-category expenses or the
+  // mortgage gets subtracted twice. (ytdExpenses/ytdProfit keep everything: they're
+  // the true ledger P&L and don't add the property-level payment on top.)
+  // …but only when a property-level payment is actually configured; otherwise the
+  // ledger's mortgage rows are the only place the mortgage is counted, so keep them.
+  const hasPropertyMortgagePayment = (parseFloat(property.mortgageMonthlyPayment) || 0) > 0;
+  const ytdExpensesExMortgage = propExpenses
+    .filter(e => e.category !== 'mortgage')
     .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-  const avgMonthlyExpenses = ytdExpenses / monthsElapsed;
+  const avgMonthlyExpenses = (hasPropertyMortgagePayment ? ytdExpensesExMortgage : ytdExpenses) / monthsElapsed;
 
   const ytdRent = (rentPayments || [])
     .filter(p => String(p.propertyId) === propId && ['paid', 'partial'].includes(p.status))
@@ -211,7 +222,7 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
             )}
             {avgMonthlyExpenses > 0 && (
               <div className="flex items-center justify-between text-xs">
-                <span className="text-white/50">Avg Expenses</span>
+                <span className="text-white/50">Avg Other Expenses</span>
                 <span className="text-red-400/70 font-medium">-{formatCur(avgMonthlyExpenses)}</span>
               </div>
             )}
