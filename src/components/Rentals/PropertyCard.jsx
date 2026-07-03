@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MoreVertical, MapPin, DollarSign, Trash2, Edit3, Eye, FileText, Clock, Users } from 'lucide-react';
-import { propertyStatuses } from '../../constants';
+import { propertyStatuses, expenseCategories } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
 const formatCur = (n) => {
@@ -30,10 +30,26 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
   // …but only when a property-level payment is actually configured; otherwise the
   // ledger's mortgage rows are the only place the mortgage is counted, so keep them.
   const hasPropertyMortgagePayment = (parseFloat(property.mortgageMonthlyPayment) || 0) > 0;
-  const ytdExpensesExMortgage = propExpenses
-    .filter(e => e.category !== 'mortgage')
-    .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-  const avgMonthlyExpenses = (hasPropertyMortgagePayment ? ytdExpensesExMortgage : ytdExpenses) / monthsElapsed;
+  const operatingExpenses = propExpenses.filter(e => !hasPropertyMortgagePayment || e.category !== 'mortgage');
+
+  // Big one-time items (≥$1,000 single expense — roof, HVAC, major plumbing) are CAPITAL/
+  // exceptional: averaging them into "monthly" cash flow makes a structurally fine property
+  // look like it loses money every month. Exclude from the monthly view, disclose below.
+  const CAPEX_THRESHOLD = 1000;
+  const oneTimeItems = operatingExpenses.filter(e => (parseFloat(e.amount) || 0) >= CAPEX_THRESHOLD);
+  const oneTimeTotal = oneTimeItems.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const recurringOps = operatingExpenses.filter(e => (parseFloat(e.amount) || 0) < CAPEX_THRESHOLD);
+
+  // Per-category monthly averages (YTD basis — becomes trailing-12-mo once a year of data exists)
+  const opsByCategory = {};
+  for (const e of recurringOps) {
+    const c = e.category || 'other';
+    opsByCategory[c] = (opsByCategory[c] || 0) + (parseFloat(e.amount) || 0);
+  }
+  const opsCatLines = Object.entries(opsByCategory)
+    .map(([cat, tot]) => ({ cat, avg: tot / monthsElapsed }))
+    .sort((a, b) => b.avg - a.avg);
+  const avgMonthlyExpenses = opsCatLines.reduce((s, l) => s + l.avg, 0);
 
   const ytdRent = (rentPayments || [])
     .filter(p => String(p.propertyId) === propId && ['paid', 'partial'].includes(p.status))
@@ -41,11 +57,17 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
     .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
   const ytdProfit = ytdRent - ytdExpenses;
 
+  // Vacant/renovation properties collect no rent — monthlyRent is MARKET rent, not
+  // actual, so it must not flow into cash flow (a vacant unit was showing +$1,300/mo).
   const monthlyRent = parseFloat(property.monthlyRent) || 0;
+  const statusNow = property.propertyStatus || (tenants.length > 0 ? 'occupied' : 'vacant');
+  const isCollecting = ['occupied', 'lease-expired', 'month-to-month'].includes(statusNow);
+  const effectiveRent = isCollecting ? monthlyRent : 0;
+
   const mortgagePayment = parseFloat(property.mortgageMonthlyPayment) || 0;
   const escrow = parseFloat(property.escrowMonthly) || 0;
-  const totalMonthlyCosts = mortgagePayment + escrow + avgMonthlyExpenses;
-  const monthlyCashFlow = monthlyRent - totalMonthlyCosts;
+  const noi = effectiveRent - avgMonthlyExpenses;             // Net Operating Income
+  const monthlyCashFlow = noi - mortgagePayment - escrow;     // after debt service
 
   const purchasePrice = parseFloat(property.purchasePrice) || 0;
   const currentValue = parseFloat(property.currentValue) || 0;
@@ -202,11 +224,32 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
             </span>
           </div>
 
-          {/* Income vs Costs breakdown */}
+          {/* Monthly snapshot: Rent − operating expenses = NOI, then − debt service */}
           <div className="space-y-1 mb-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-white/50">Rent</span>
-              <span className="text-emerald-400 font-medium">{formatCur(monthlyRent)}</span>
+              <span className="text-white/50">{isCollecting ? 'Rent' : 'Market Rent (vacant)'}</span>
+              {isCollecting
+                ? <span className="text-emerald-400 font-medium">{formatCur(monthlyRent)}</span>
+                : <span className="text-white/30 font-medium line-through">{formatCur(monthlyRent)}</span>}
+            </div>
+            {opsCatLines.slice(0, 3).map(l => {
+              const catObj = expenseCategories.find(c => c.value === l.cat);
+              return (
+                <div key={l.cat} className="flex items-center justify-between text-xs">
+                  <span className="text-white/50">{catObj ? `${catObj.label}` : l.cat} <span className="text-white/25">avg</span></span>
+                  <span className="text-red-400/70 font-medium">-{formatCur(l.avg)}</span>
+                </div>
+              );
+            })}
+            {opsCatLines.length > 3 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/50">Other ops <span className="text-white/25">avg</span></span>
+                <span className="text-red-400/70 font-medium">-{formatCur(opsCatLines.slice(3).reduce((s, l) => s + l.avg, 0))}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.06]">
+              <span className="text-white/60 font-semibold">NOI</span>
+              <span className={`font-semibold ${noi >= 0 ? 'text-emerald-400/90' : 'text-red-400/90'}`}>{noi >= 0 ? '' : '-'}{formatCur(Math.abs(noi))}</span>
             </div>
             {hasMortgageData && (
               <div className="flex items-center justify-between text-xs">
@@ -220,10 +263,9 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
                 <span className="text-red-400/70 font-medium">-{formatCur(escrow)}</span>
               </div>
             )}
-            {avgMonthlyExpenses > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-white/50">Avg Other Expenses</span>
-                <span className="text-red-400/70 font-medium">-{formatCur(avgMonthlyExpenses)}</span>
+            {oneTimeTotal > 0 && (
+              <div className="text-[10px] text-amber-400/60 pt-1" title={oneTimeItems.map(e => `${e.date} · ${e.description || e.category} · ${formatCur(e.amount)}`).join('\n')}>
+                One-time items this yr: {formatCur(oneTimeTotal)} (excluded from monthly avg{oneTimeItems.length > 1 ? `, ${oneTimeItems.length} items` : ''})
               </div>
             )}
           </div>
