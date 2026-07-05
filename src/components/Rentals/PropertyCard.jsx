@@ -66,8 +66,12 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
 
   const mortgagePayment = parseFloat(property.mortgageMonthlyPayment) || 0;
   const escrow = parseFloat(property.escrowMonthly) || 0;
-  const noi = effectiveRent - avgMonthlyExpenses;             // Net Operating Income
-  const monthlyCashFlow = noi - mortgagePayment - escrow;     // after debt service
+  // Non-escrowed taxes/insurance (e.g. Hillcrest — Rocket payment is pure P&I):
+  // paid separately, usually annually, so they never show in the monthly ledger.
+  const taxInsMonthly = property.taxesInsNotEscrowed
+    ? ((parseFloat(property.annualPropertyTax) || 0) + (parseFloat(property.annualInsurance) || 0)) / 12 : 0;
+  const noi = effectiveRent - avgMonthlyExpenses - taxInsMonthly;  // Net Operating Income
+  const monthlyCashFlow = noi - mortgagePayment - escrow;          // after debt service
 
   const purchasePrice = parseFloat(property.purchasePrice) || 0;
   const currentValue = parseFloat(property.currentValue) || 0;
@@ -245,6 +249,12 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
               <div className="flex items-center justify-between text-xs">
                 <span className="text-white/50">Other ops <span className="text-white/25">avg</span></span>
                 <span className="text-red-400/70 font-medium">-{formatCur(opsCatLines.slice(3).reduce((s, l) => s + l.avg, 0))}</span>
+              </div>
+            )}
+            {taxInsMonthly > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/50">Taxes+Ins <span className="text-white/25">(not escrowed, est)</span></span>
+                <span className="text-red-400/70 font-medium">-{formatCur(taxInsMonthly)}</span>
               </div>
             )}
             <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.06]">

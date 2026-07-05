@@ -66,7 +66,8 @@ export default function SellVsHold({ db, properties, expenses, canManage, curren
         remMonths: 336, // ≈28 yrs left on the 2024 30-yr notes
         rent: parseFloat(prop.monthlyRent),
         debt: parseFloat(prop.mortgageMonthlyPayment) || 0,
-        opex: ops,
+        opex: ops + (prop.taxesInsNotEscrowed
+          ? ((parseFloat(prop.annualPropertyTax) || 0) + (parseFloat(prop.annualInsurance) || 0)) / 12 : 0),
       };
       return { p, r: analyze(p, a) };
     })
