@@ -33,6 +33,7 @@ import ChecklistDetailModal from './components/Checklists/ChecklistDetailModal';
 import PropertyCard from './components/Rentals/PropertyCard';
 import NewPropertyModal from './components/Rentals/NewPropertyModal';
 import PropertyDetail from './components/Rentals/PropertyDetail';
+import SellVsHold from './components/Rentals/SellVsHold';
 import PropertyFinancialBreakdownModal from './components/Rentals/PropertyFinancialBreakdownModal';
 import TenantModal from './components/Rentals/TenantModal';
 
@@ -1601,6 +1602,9 @@ export default function RainbowRentals() {
                               <p className="text-3xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0))}</p>
                             </div>
                           </div>
+
+                          {/* Sell vs hold analysis + Rupert review (managers only) */}
+                          <SellVsHold db={db} properties={properties} expenses={expenses} canManage={canManage} currentUser={currentUser} showToast={showToast} />
                         </div>
                       )}
                     </>
