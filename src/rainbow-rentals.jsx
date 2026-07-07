@@ -366,6 +366,15 @@ export default function RainbowRentals() {
   const [showChecklistInitModal, setShowChecklistInitModal] = useState(null);
   const [showChecklistDetailModal, setShowChecklistDetailModal] = useState(null);
 
+  // Deep-link: ?section=analysis (from push notifications) → Properties → 📊 overview.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('section') === 'analysis') { setActiveSection('rentals'); setPropertyViewMode('overview'); window.history.replaceState({}, '', window.location.pathname); }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ========== AUTH ==========
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
