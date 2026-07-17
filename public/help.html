@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How to use Rainbow Reality 🌈</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg2: #1e293b;
+    --card: rgba(255,255,255,0.05);
+    --card-border: rgba(255,255,255,0.10);
+    --text: #ffffff;
+    --dim: rgba(255,255,255,0.60);
+    --dimmer: rgba(255,255,255,0.40);
+    --teal: #2dd4bf;
+    --indigo: #818cf8;
+    --emerald: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(to bottom, #0f172a, #0f172a 60%, #1e293b);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .rainbow { height: 6px; background: linear-gradient(to right, #ef4444, #facc15, #22c55e, #3b82f6, #a855f7); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* ---------- typography ---------- */
+  h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+  .subtitle { color: var(--dim); font-size: 15px; margin-bottom: 28px; }
+  h2 { font-size: 21px; font-weight: 700; margin: 48px 0 6px; scroll-margin-top: 20px; }
+  h2 .stepnum {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 10px; margin-right: 10px;
+    background: linear-gradient(135deg, #ef4444, #22c55e, #a855f7);
+    font-size: 15px; color: #fff; vertical-align: -4px;
+  }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 6px; }
+  p { color: var(--dim); font-size: 15px; margin-bottom: 10px; }
+  p strong, li strong { color: var(--text); }
+  ol.steps { margin: 10px 0 14px 22px; color: var(--dim); font-size: 15px; }
+  ol.steps li { margin-bottom: 8px; }
+  .tip {
+    background: rgba(45,212,191,0.08); border: 1px solid rgba(45,212,191,0.25);
+    border-radius: 14px; padding: 12px 14px; font-size: 14px; color: var(--dim); margin: 14px 0;
+  }
+  .tip b { color: var(--teal); }
+
+  /* ---------- table of contents ---------- */
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .toc a {
+    display: inline-block; padding: 7px 13px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--card-border);
+    color: var(--dim); text-decoration: none; font-size: 13px; font-weight: 600;
+  }
+  .toc a:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
+  /* ---------- mockup frames ---------- */
+  .shot {
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; overflow: hidden;
+    background: #0f172a; margin: 16px 0 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+    max-width: 420px;
+  }
+  .shot .bar { height: 4px; background: linear-gradient(to right, #ef4444, #facc15, #22c55e, #3b82f6, #a855f7); }
+  .shot .inner { padding: 14px; }
+  .caption { font-size: 12.5px; color: var(--dimmer); margin-bottom: 4px; max-width: 420px; }
+
+  /* mock app header */
+  .mock-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+  .mock-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .mock-logo .rr {
+    width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #ef4444, #22c55e, #a855f7); font-size: 11px; font-weight: 800;
+  }
+  .iconbtn {
+    width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.10);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 14px; color: rgba(255,255,255,0.65);
+    position: relative;
+  }
+  .glow { box-shadow: 0 0 0 2px var(--amber); }
+  .pointer {
+    position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+    background: var(--amber); color: #1e293b; font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 8px; white-space: nowrap;
+  }
+  .pointer:after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: var(--amber);
+  }
+
+  /* mock cards & rows */
+  .mock-card { border-radius: 16px; padding: 12px; margin-bottom: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); }
+  .mock-card.weekly { background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(168,85,247,0.10)); border-color: rgba(129,140,248,0.35); }
+  .mock-title { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+  .mock-sub { font-size: 12px; color: var(--dim); margin-bottom: 10px; }
+  .mock-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dimmer); margin: 10px 0 5px; }
+  .mock-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
+  .mock-row:last-child { border-bottom: none; }
+  .mock-row .who { color: rgba(255,255,255,0.85); }
+  .mock-row .amt { color: var(--dimmer); }
+  .btn { border-radius: 9px; padding: 4px 11px; font-size: 11.5px; font-weight: 700; color: #fff; display: inline-block; }
+  .btn.green { background: #10b981; }
+  .btn.red { background: #ef4444; }
+  .btn.plain { background: rgba(255,255,255,0.12); }
+  .btn.indigo { background: #6366f1; }
+  .btn.big { display: block; text-align: center; padding: 10px; border-radius: 12px; font-size: 13.5px; background: linear-gradient(to right, #6366f1, #a855f7); margin-top: 10px; }
+  .btn.amberb { display: block; text-align: center; padding: 8px; border-radius: 12px; font-size: 12.5px; background: rgba(245,158,11,0.15); border: 1px solid rgba(251,191,36,0.4); color: #fde68a; margin-top: 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .checkrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); font-size: 13px; color: rgba(255,255,255,0.85); margin: 8px 0; }
+  .checkbox { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,0.30); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .checkbox.on { background: #10b981; border-color: #10b981; }
+
+  /* mock form fields */
+  .field { margin-bottom: 9px; }
+  .field label { display: block; font-size: 11px; font-weight: 700; color: var(--dimmer); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .field .box {
+    background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.15); border-radius: 11px;
+    padding: 8px 11px; font-size: 13px; color: rgba(255,255,255,0.9);
+  }
+  .field .box.placeholder { color: rgba(255,255,255,0.35); }
+  .notebox { display: flex; gap: 8px; margin-bottom: 8px; }
+  .notebox .box { flex: 1; min-height: 44px; }
+  .note-item { border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); padding: 8px 10px; margin-bottom: 6px; }
+  .note-item .t { font-size: 13px; color: rgba(255,255,255,0.85); }
+  .note-item .m { font-size: 10.5px; color: var(--dimmer); margin-top: 2px; }
+
+  /* tab explanation grid */
+  .tabgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+  @media (max-width: 560px) { .tabgrid { grid-template-columns: 1fr; } }
+  .tabcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 12px 14px; }
+  .tabcard .tn { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+  .tabcard .td { font-size: 13px; color: var(--dim); }
+
+  .numbadge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; border-radius: 999px; background: var(--amber); color: #1e293b;
+    font-size: 12px; font-weight: 800; margin-right: 8px; flex-shrink: 0;
+  }
+  .legend { list-style: none; margin: 10px 0 0; }
+  .legend li { display: flex; align-items: baseline; gap: 4px; font-size: 14px; color: var(--dim); margin-bottom: 8px; }
+  .legend li b { color: var(--text); }
+
+  .divider { height: 1px; background: rgba(255,255,255,0.10); margin: 44px 0 0; }
+  footer { margin-top: 28px; font-size: 13px; color: var(--dimmer); }
+  a.link { color: var(--teal); }
+</style>
+</head>
+<body>
+<div class="rainbow"></div>
+<div class="wrap">
+
+  <h1>🌈 How to use Rainbow Reality</h1>
+  <p class="subtitle">A quick guide to the rental app — what to do each week and where everything lives. Bookmark this page: <a class="link" href="https://rainbowrentals.app/help.html">rainbowrentals.app/help.html</a></p>
+
+  <div class="toc">
+    <a href="#start">Getting started</a>
+    <a href="#weekly">Weekly routine</a>
+    <a href="#rent">Record rent</a>
+    <a href="#expense">Add expense</a>
+    <a href="#lease">Update a lease</a>
+    <a href="#notes">Leave a note</a>
+    <a href="#search">Search &amp; help</a>
+    <a href="#tabs">All the tabs</a>
+    <a href="#phone">Phone setup</a>
+  </div>
+
+  <!-- ============ GETTING STARTED ============ -->
+  <h2 id="start"><span class="stepnum">1</span>Getting started</h2>
+  <p>Go to <a class="link" href="https://rainbowrentals.app">rainbowrentals.app</a> and tap <strong>Sign in with Google</strong>. Use your own Google account — it's already on the approved list, so you'll land right on the app. Nobody else can get in.</p>
+
+  <p class="caption">The sign-in screen:</p>
+  <div class="shot"><div class="bar"></div>
+    <div class="inner" style="text-align:center; padding: 28px 14px;">
+      <div style="font-size: 40px; margin-bottom: 8px;">🌈</div>
+      <div style="font-weight: 800; font-size: 17px; margin-bottom: 4px;">Rainbow Reality</div>
+      <div style="font-size: 12.5px; color: rgba(255,255,255,0.5); margin-bottom: 16px;">Rental property management</div>
+      <div class="btn plain" style="display:inline-block; padding: 9px 18px; font-size: 13px; border-radius: 12px;">🔵 Sign in with Google</div>
+    </div>
+  </div>
+
+  <!-- ============ WEEKLY ROUTINE ============ -->
+  <h2 id="weekly"><span class="stepnum">2</span>Your weekly routine</h2>
+  <p>Everything you need each week is on the <strong>✅ Action Items</strong> tab (the app opens there automatically). Look for the purple <strong>"This week's update"</strong> card and work top to bottom — it should take just a few minutes:</p>
+
+  <p class="caption">The weekly update card — numbered steps explained below:</p>
+  <div class="shot"><div class="bar"></div>
+    <div class="inner">
+      <div class="mock-card weekly">
+        <div class="mock-title"><span>🗓️ This week's update</span><span style="font-size:11px; color: rgba(255,255,255,0.5); font-weight: 400;">2026-W29</span></div>
+        <div class="mock-sub">Record rents, any lease changes, and expenses — then tap <b>Done &amp; send</b>.</div>
+
+        <div class="mock-label"><span class="numbadge">1</span>💰 Rents to record (2)</div>
+        <div class="mock-row"><span class="who">🏠 Maple St House <span class="amt">· $1,450</span></span><span class="btn green">Record</span></div>
+        <div class="mock-row"><span class="who">🏢 Oakwood Condo <span class="amt">· $1,200</span></span><span class="btn green">Record</span></div>
+
+        <div class="grid2">
+          <span class="btn plain" style="text-align:center; padding: 8px;"><span class="numbadge" style="min-width:18px; height:18px; font-size:11px;">2</span>📝 Update a lease</span>
+          <span class="btn plain" style="text-align:center; padding: 8px;"><span class="numbadge" style="min-width:18px; height:18px; font-size:11px;">3</span>🧾 Add expense</span>
+        </div>
+
+        <div class="checkrow"><span class="numbadge" style="min-width:18px; height:18px; font-size:11px;">4</span><span class="checkbox on">✓</span>🔑 Update rent payments in <b>&nbsp;Avail</b></div>
+
+        <div class="mock-label"><span class="numbadge">5</span>✅ This week's to-dos (1)</div>
+        <div class="mock-row"><span class="who">Fix gutter at Maple St</span><span class="btn plain">Done</span></div>
+
+        <div class="mock-label"><span class="numbadge">6</span>📝 Notes</div>
+        <div class="notebox"><div class="box placeholder" style="font-size:12.5px;">Anything Mike should know? Tenant calls, repairs, questions…</div><span class="btn indigo" style="align-self:flex-end; padding:8px 12px;">Add</span></div>
+
+        <span class="btn big"><span class="numbadge" style="min-width:18px; height:18px; font-size:11px;">7</span>✅ Done &amp; send</span>
+      </div>
+    </div>
+  </div>
+
+  <ul class="legend">
+    <li><span class="numbadge">1</span><span><b>Record each rent that came in.</b> Tap the green <b>Record</b> button next to a property — the form opens already filled in with the right property, amount, and month. Just confirm (or tweak the amount if it was different) and save.</span></li>
+    <li><span class="numbadge">2</span><span><b>Update a lease</b> — only if something changed (renewal, new rent amount, new tenant). Skip it most weeks.</span></li>
+    <li><span class="numbadge">3</span><span><b>Add expense</b> — log anything you spent or got billed for: repairs, supplies, contractors. Do this right when it happens so nothing gets forgotten.</span></li>
+    <li><span class="numbadge">4</span><span><b>Tick the Avail checkbox</b> once you've marked the rent payments in Avail too.</span></li>
+    <li><span class="numbadge">5</span><span><b>Check the to-dos.</b> Tap <b>Done</b> on anything you finished this week.</span></li>
+    <li><span class="numbadge">6</span><span><b>Leave a note for Mike</b> — anything worth sharing: a tenant called, something looks off, a question. More below in <a class="link" href="#notes">Leave a note</a>.</span></li>
+    <li><span class="numbadge">7</span><span><b>Tap Done &amp; send.</b> This tells Mike you've finished the week's updates (and reminds him to pay you 😄).</span></li>
+  </ul>
+
+  <!-- ============ RECORD RENT ============ -->
+  <h2 id="rent"><span class="stepnum">3</span>Recording a rent payment</h2>
+  <p>When you tap <strong>Record</strong>, this form pops up. Almost everything is pre-filled — check it and hit save:</p>
+
+  <div class="shot"><div class="bar"></div>
+    <div class="inner">
+      <div class="mock-card">
+        <div class="mock-title"><span>💰 Record Income</span><span style="color: rgba(255,255,255,0.4);">✕</span></div>
+        <div class="field"><label>Property</label><div class="box">🏠 Maple St House</div></div>
+        <div class="field"><label>Amount</label><div class="box">$ 1,450</div></div>
+        <div class="field"><label>Month</label><div class="box">July 2026</div></div>
+        <div class="field"><label>Date paid</label><div class="box">2026-07-17</div></div>
+        <div class="field"><label>Status</label><div class="box">✅ Paid</div></div>
+        <span class="btn big" style="background: #10b981;">Save payment</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip"><b>Partial payment?</b> Change the amount to what actually arrived and set status to <b>Partial</b> — the app keeps flagging the property until the rest is recorded.</div>
+
+  <!-- ============ ADD EXPENSE ============ -->
+  <h2 id="expense"><span class="stepnum">4</span>Adding an expense</h2>
+  <p>Tap <strong>🧾 Add expense</strong> on the weekly card (or the <strong>💸 Expenses</strong> tab → add). Fill in what it was, pick the property, and attach a photo of the receipt if you have one:</p>
+
+  <div class="shot"><div class="bar"></div>
+    <div class="inner">
+      <div class="mock-card">
+        <div class="mock-title"><span>💸 Add Expense</span><span style="color: rgba(255,255,255,0.4);">✕</span></div>
+        <div class="field"><label>Property</label><div class="box">🏢 Oakwood Condo</div></div>
+        <div class="field"><label>Category</label><div class="box">🔧 Repair</div></div>
+        <div class="field"><label>Amount</label><div class="box">$ 86.50</div></div>
+        <div class="field"><label>Description</label><div class="box">Kitchen faucet replacement — Home Depot</div></div>
+        <div class="field"><label>Receipt</label><div class="box placeholder">📸 Tap to add a photo</div></div>
+        <span class="btn big" style="background: #10b981;">Save expense</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip"><b>Why it matters:</b> every expense you log here goes straight into the tax records — so a 30-second entry now saves real money in April. When in doubt, log it and add a note.</div>
+
+  <!-- ============ UPDATE LEASE ============ -->
+  <h2 id="lease"><span class="stepnum">5</span>Updating a lease</h2>
+  <p>Only needed when something changes — a renewal, a rent increase, or a new tenant. Tap <strong>📝 Update a lease</strong>, pick the property, and edit the tenant/lease details:</p>
+
+  <div class="shot"><div class="bar"></div>
+    <div class="inner">
+      <div class="mock-card">
+        <div class="mock-title"><span>👤 Tenant &amp; Lease</span><span style="color: rgba(255,255,255,0.4);">✕</span></div>
+        <div class="field"><label>Tenant name</label><div class="box">Jordan Smith</div></div>
+        <div class="field"><label>Monthly rent</label><div class="box">$ 1,450</div></div>
+        <div class="field"><label>Lease start</label><div class="box">2026-08-01</div></div>
+        <div class="field"><label>Lease end</label><div class="box">2027-07-31</div></div>
+        <span class="btn big" style="background: #10b981;">Save</span>
+      </div>
+    </div>
+  </div>
+
+  <p>The app watches lease end dates for you — anything expiring within 30 days shows up automatically as an alert on the Action Items tab.</p>
+
+  <!-- ============ NOTES ============ -->
+  <h2 id="notes"><span class="stepnum">6</span>Leaving a note for Mike</h2>
+  <p>The <strong>📝 Notes</strong> box lives right inside the weekly update card. Type anything Mike should know and tap <strong>Add</strong> — he sees it instantly, and every note is saved with your name and the date:</p>
+
+  <div class="shot"><div class="bar"></div>
+    <div class="inner">
+      <div class="mock-card weekly">
+        <div class="mock-label" style="margin-top:0;">📝 Notes (2 this week)</div>
+        <div class="notebox"><div class="box placeholder" style="font-size:12.5px;">Anything Mike should know? Tenant calls, repairs, questions…</div><span class="btn indigo" style="align-self:flex-end; padding:8px 12px;">Add</span></div>
+        <div class="note-item"><div class="t">Maple St tenant asked about renewing early — told them you'd call this week.</div><div class="m">Liam · Jul 16</div></div>
+        <div class="note-item"><div class="t">Oakwood AC making noise again, scheduled HVAC guy for Tuesday.</div><div class="m">Liam · Jul 14</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p>Good things to put in a note: tenant calls or complaints, anything that looks like it needs repair soon, questions for Mike, or context on an expense ("the $86 was the faucet, had to replace not repair"). Notes stay visible to both of you — older ones are under <em>Show all notes</em>.</p>
+
+  <!-- ============ SEARCH & HELP ============ -->
+  <h2 id="search"><span class="stepnum">7</span>Finding things — search &amp; help</h2>
+  <p>Top-right corner of the app, two buttons:</p>
+
+  <div class="shot" style="overflow: visible;"><div class="bar"></div>
+    <div class="mock-head" style="padding-top: 40px;">
+      <div class="mock-logo"><span class="rr">RR</span> Rainbow Reality</div>
+      <div style="display:flex; gap:7px;">
+        <span class="iconbtn glow">🔍<span class="pointer">Search everything</span></span>
+        <span class="iconbtn glow">❓<span class="pointer" style="left: auto; right: -8px; transform: none;">This guide</span></span>
+        <span class="iconbtn">⎋</span>
+      </div>
+    </div>
+    <div class="inner">
+      <div class="field" style="margin: 0;"><div class="box placeholder">Search everything…</div></div>
+    </div>
+  </div>
+
+  <ul class="legend" style="margin-top: 14px;">
+    <li><span class="numbadge">🔍</span><span><b>Search</b> looks across everything at once — properties, tenants, rent payments, expenses, documents, tasks. Type a tenant's name, a street, or "faucet" and jump straight to it.</span></li>
+    <li><span class="numbadge">❓</span><span><b>Help</b> opens this guide any time you need a refresher.</span></li>
+  </ul>
+
+  <!-- ============ TABS ============ -->
+  <h2 id="tabs"><span class="stepnum">8</span>What each tab is for</h2>
+  <p>On your phone, tap the section name at the top-left to switch tabs. You'll mostly live in Action Items — the rest are there when you need them:</p>
+
+  <div class="tabgrid">
+    <div class="tabcard"><div class="tn">✅ Action Items</div><div class="td">Home base. The weekly update card, rents due, lease alerts, to-dos, and notes.</div></div>
+    <div class="tabcard"><div class="tn">🏠 Properties</div><div class="td">Every property with its details, tenants, photos, and history. Tap one to drill in.</div></div>
+    <div class="tabcard"><div class="tn">👤 Tenants</div><div class="td">All tenants in one list — contact info, lease dates, which property.</div></div>
+    <div class="tabcard"><div class="tn">💰 Income</div><div class="td">The rent ledger — every payment recorded, by month and property.</div></div>
+    <div class="tabcard"><div class="tn">💸 Expenses</div><div class="td">Every expense logged, with receipts. Filterable by property and category.</div></div>
+    <div class="tabcard"><div class="tn">⚖️ Reconcile</div><div class="td">Mike's view comparing recorded rents against actual bank deposits.</div></div>
+    <div class="tabcard"><div class="tn">📊 Dashboard</div><div class="td">Monthly money report — income vs. expenses per property.</div></div>
+    <div class="tabcard"><div class="tn">📄 Documents</div><div class="td">Leases, receipts, insurance docs — uploaded and searchable.</div></div>
+  </div>
+
+  <!-- ============ PHONE SETUP ============ -->
+  <h2 id="phone"><span class="stepnum">9</span>One-time phone setup</h2>
+  <h3>📱 Add it to your home screen</h3>
+  <ol class="steps">
+    <li>Open <a class="link" href="https://rainbowrentals.app">rainbowrentals.app</a> in <strong>Safari</strong> (iPhone) or <strong>Chrome</strong> (Android).</li>
+    <li>Tap the <strong>Share</strong> button (iPhone: the square with the up-arrow).</li>
+    <li>Choose <strong>Add to Home Screen</strong> → <strong>Add</strong>.</li>
+  </ol>
+  <p>Now it opens like a regular app with the 🌈 icon.</p>
+
+  <h3>🔔 Turn on reminders</h3>
+  <p>Open the app from your home screen and tap <strong>"🔔 Enable weekly reminders on this device"</strong> on the weekly update card, then allow notifications. You'll get a nudge each week until you've tapped Done &amp; send — after that it leaves you alone.</p>
+
+  <div class="divider"></div>
+  <footer>
+    <p>Questions? Text Mike — or leave a note in the app 📝</p>
+    <p style="margin-top:4px;">🌈 Rainbow Reality · <a class="link" href="https://rainbowrentals.app">rainbowrentals.app</a> · this guide: <a class="link" href="https://rainbowrentals.app/help.html">rainbowrentals.app/help.html</a></p>
+  </footer>
+</div>
+</body>
+</html>

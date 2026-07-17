@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3, Trash2, Eye, DollarSign, MapPin, Calendar, FileText, CheckSquare } from 'lucide-react';
+import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3, Trash2, Eye, DollarSign, MapPin, Calendar, FileText, CheckSquare, HelpCircle } from 'lucide-react';
 
 // Constants and utilities
 import {
@@ -248,6 +248,37 @@ export default function RainbowRentals() {
     showInvestorModal, setShowInvestorModal,
     addInvestor, updateInvestor, deleteInvestor,
   } = ownershipHook;
+
+  // ========== WEEKLY NOTES (Liam ↔ Mike) ==========
+  // rentalData/weeklyNotes — running feed of short notes shared between the two
+  // operators, surfaced in the "This week's update" card (capped 100, newest first).
+  const [weeklyNotes, setWeeklyNotes] = useState([]);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [showAllNotes, setShowAllNotes] = useState(false);
+  const weeklyNotesRef = useRef([]);
+  useEffect(() => { weeklyNotesRef.current = weeklyNotes; }, [weeklyNotes]);
+
+  const saveWeeklyNotes = async (next) => {
+    setWeeklyNotes(next);
+    try {
+      await setDoc(doc(db, 'rentalData', 'weeklyNotes'),
+        JSON.parse(JSON.stringify({ notes: next, lastUpdated: new Date().toISOString() })), { merge: true });
+    } catch (e) { console.error('weeklyNotes save:', e); showToast && showToast('Note not saved — ' + e.message, 'error'); }
+  };
+
+  const addWeeklyNote = useCallback(async () => {
+    const text = (noteDraft || '').trim();
+    if (!text || !user) return;
+    const note = { id: `note-${Date.now()}`, text: text.slice(0, 1000), by: currentUser || 'unknown', at: new Date().toISOString() };
+    setNoteDraft('');
+    await saveWeeklyNotes([note, ...weeklyNotesRef.current].slice(0, 100));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteDraft, user, currentUser]);
+
+  const deleteWeeklyNote = useCallback(async (id) => {
+    await saveWeeklyNotes(weeklyNotesRef.current.filter(n => n.id !== id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ========== ACTIVITY LOG + SOFT-DELETE (trash) ==========
   // rentalData/activity — append-only who/what/when (capped 300); powers the
@@ -680,7 +711,10 @@ export default function RainbowRentals() {
     const u2 = onSnapshot(doc(db, 'rentalData', 'trash'),
       (snap) => { if (snap.exists()) setTrashItems(snap.data().items || []); },
       (e) => console.error('trash load:', e));
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(doc(db, 'rentalData', 'weeklyNotes'),
+      (snap) => { if (snap.exists()) setWeeklyNotes(snap.data().notes || []); },
+      (e) => console.error('weeklyNotes load:', e));
+    return () => { u1(); u2(); u3(); };
   }, [user]);
 
   const resolveReviewItem = async (itemId, patch) => {
@@ -1063,6 +1097,10 @@ export default function RainbowRentals() {
               <button onClick={() => setShowSearch(!showSearch)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
                 <Search className="w-4 h-4 text-white/60" />
               </button>
+              <a href="/help.html" target="_blank" rel="noopener" title="How to use this app"
+                className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
+                <HelpCircle className="w-4 h-4 text-white/60" />
+              </a>
               <button onClick={handleLogout} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
                 <LogOut className="w-4 h-4 text-white/60" />
               </button>
@@ -1907,7 +1945,7 @@ export default function RainbowRentals() {
                       try {
                         await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
                           week: weekId, by: currentUser || 'Liam', at,
-                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked },
+                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked, notesThisWeek: weeklyNotes.filter(n => n.at >= new Date(Date.now() - 7 * 86400000).toISOString()).length },
                           mikeNotified: false, // push layer flips this when Mike is alerted
                         }, { merge: true });
                         // Ping Mike instantly via mikeslife (his real push token); the daily cron is a backstop.
@@ -1967,6 +2005,60 @@ export default function RainbowRentals() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Notes — anything to share with the other person this week */}
+                        {(() => {
+                          const weekAgoIso = new Date(Date.now() - 7 * 86400000).toISOString();
+                          const notesThisWeek = weeklyNotes.filter(n => n.at >= weekAgoIso).length;
+                          const visibleNotes = showAllNotes ? weeklyNotes : weeklyNotes.slice(0, 5);
+                          return (
+                            <div className="mb-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">
+                                📝 Notes {notesThisWeek > 0 && `(${notesThisWeek} this week)`}
+                              </div>
+                              <div className="flex gap-2 mb-2">
+                                <textarea
+                                  value={noteDraft}
+                                  onChange={e => setNoteDraft(e.target.value)}
+                                  rows={2}
+                                  placeholder={currentUser === 'Mike'
+                                    ? 'Leave a note for Liam — anything he should know this week…'
+                                    : 'Anything Mike should know? Tenant calls, repairs, questions…'}
+                                  className="flex-1 bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
+                                />
+                                <button onClick={addWeeklyNote} disabled={!noteDraft.trim()}
+                                  className="self-end px-3 py-2 rounded-xl bg-indigo-500/90 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-default text-white text-sm font-semibold">
+                                  Add
+                                </button>
+                              </div>
+                              {visibleNotes.length === 0 ? (
+                                <div className="text-sm text-white/40">No notes yet — anything you type here is saved for both of you.</div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {visibleNotes.map(n => (
+                                    <div key={n.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-white/[0.06] border border-white/10">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-white/85 whitespace-pre-wrap break-words">{n.text}</p>
+                                        <p className="text-[11px] text-white/35 mt-0.5">
+                                          {n.by} · {new Date(n.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </p>
+                                      </div>
+                                      {(n.by === currentUser || currentUser === 'Mike') && (
+                                        <button onClick={() => deleteWeeklyNote(n.id)} title="Delete note"
+                                          className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/10">✕</button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {weeklyNotes.length > 5 && (
+                                    <button onClick={() => setShowAllNotes(v => !v)} className="text-xs text-indigo-300 hover:text-indigo-200 font-medium">
+                                      {showAllNotes ? 'Show fewer' : `Show all ${weeklyNotes.length} notes`}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {pushState !== 'granted' && (
                           <button onClick={enableAlerts} className="w-full mb-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">🔔 Enable weekly reminders on this device</button>
