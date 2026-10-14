@@ -326,8 +326,8 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                           )}
                           {canManage && onDeleteTenant && (
                             <button onClick={e => { e.stopPropagation(); onDeleteTenant(tenant.propertyId, tenant); }}
-                              className="ml-auto text-white/25 hover:text-red-400" title={`Remove ${tenant.name}`}>
-                              <Trash2 className="w-4 h-4" />
+                              className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-red-300/70 hover:text-red-300 hover:bg-red-500/10 text-xs" title={`Remove ${tenant.name}`}>
+                              <Trash2 className="w-4 h-4" /> Remove
                             </button>
                           )}
                         </div>

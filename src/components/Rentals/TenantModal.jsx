@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image, Loader } from 'lucide-react';
 import { tenantStatuses, paymentMethods } from '../../constants';
 
-const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUploadPhoto }) => {
+const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUploadPhoto, onDelete }) => {
   // If property has no id (e.g. _pickProperty mode), show property picker
   const needsPropertyPicker = !property?.id;
 
@@ -410,6 +410,14 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-800/50 border-t border-white/15">
+          {tenant && onDelete && (
+            <button
+              onClick={() => onDelete(tenant)}
+              className="mr-auto px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition text-sm font-medium"
+            >
+              Remove tenant
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"

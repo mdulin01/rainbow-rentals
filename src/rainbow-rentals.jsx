@@ -2411,6 +2411,24 @@ export default function RainbowRentals() {
             property={showTenantModal}
             properties={properties}
             tenant={showTenantModal?._editTenant || (showTenantModal?._addNew ? null : null)}
+            onDelete={(tenant) => {
+              const pid = showTenantModal?.id;
+              const prop = properties.find(p => String(p.id) === String(pid));
+              setConfirmDialog({
+                title: 'Remove tenant',
+                message: `Remove ${tenant.name} from ${prop?.name || 'this property'}? Their rent history stays; only the tenant record goes.`,
+                onConfirm: () => {
+                  removeTenant(pid, tenant.id);
+                  setConfirmDialog(null);
+                  setShowTenantModal(null);
+                  if (selectedProperty && String(selectedProperty.id) === String(pid)) {
+                    const left = getPropertyTenants(selectedProperty).filter(t => String(t.id) !== String(tenant.id));
+                    setSelectedProperty({ ...selectedProperty, tenants: left, tenant: left[0] || null });
+                  }
+                  showToast(`${tenant.name} removed`, 'info');
+                },
+              });
+            }}
             onSave={(tenantData, overridePropertyId) => {
               // Determine target property ID
               const targetId = overridePropertyId || showTenantModal.id;
