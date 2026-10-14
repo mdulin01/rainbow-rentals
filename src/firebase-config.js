@@ -1,4 +1,4 @@
-// Firebase Configuration for Rainbow Reality
+// Firebase Configuration for Rainbow Rentals
 // Replace these values with your own Firebase project credentials
 // Get these from: https://console.firebase.google.com > Project Settings > General > Your apps
 

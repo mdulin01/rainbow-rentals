@@ -33,5 +33,5 @@ export async function requireManager(req) {
   const decoded = await adminAuth().verifyIdToken(token);
   const email = (decoded.email || '').toLowerCase();
   if (!MANAGERS.includes(email)) { const e = new Error('Not a manager'); e.status = 403; throw e; }
-  return { uid: decoded.uid, email, name: email.includes('mdulin') ? 'Mike' : email.includes('liam') ? 'Liam' : email };
+  return { uid: decoded.uid, email, name: email.includes('mdulin') ? 'Mike' : email.includes('liam') ? 'Liam' : email.split('@')[0] };
 }

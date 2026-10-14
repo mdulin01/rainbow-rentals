@@ -53,7 +53,7 @@ export async function setTenantSmsOk(propertyId, tenantId, smsOk) {
     const next = props.map(p => String(p.id) !== String(propertyId) ? p : {
       ...p,
       tenants: (p.tenants || []).map(t => String(t.id) === String(tenantId) ? { ...t, smsOk } : t),
-      tenant: p.tenant && (!tenantId || tenantId === 'legacy') ? { ...p.tenant, smsOk } : p.tenant,
+      tenant: p.tenant && (!tenantId || String(tenantId).startsWith('legacy')) ? { ...p.tenant, smsOk } : p.tenant,
     });
     tx.set(ref, { properties: next, lastUpdated: new Date().toISOString(), updatedBy: 'sms' }, { merge: true });
   });

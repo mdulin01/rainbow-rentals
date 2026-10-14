@@ -38,7 +38,7 @@ const ChecklistInitModal = ({ onClose, onCreateChecklist, properties, currentUse
         addedAt: new Date().toISOString(),
         photos: [],
       })),
-      assignedTo: 'Both',
+      assignedTo: 'Mike',
       signature: null,
       highlighted: false,
       createdBy: currentUser,

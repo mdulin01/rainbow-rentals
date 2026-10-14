@@ -8,7 +8,7 @@ const LoginScreen = ({ onLogin, loading }) => (
         <div className="w-20 h-20 bg-gradient-to-br from-red-500 via-yellow-400 via-green-500 via-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg mx-auto mb-6">
           <span className="text-3xl font-bold text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>RR</span>
         </div>
-        <h1 className="text-3xl font-bold text-white mb-2">Rainbow Reality</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Rainbow Rentals</h1>
         <p className="text-slate-400 mb-8">Property Management Made Simple</p>
 
         <button

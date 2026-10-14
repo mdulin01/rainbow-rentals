@@ -19,7 +19,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
     leaseEnd: '',
     monthlyRent: '',
     securityDeposit: '',
-    status: 'pending',
+    status: 'active',
     licensePhotoUrl: '',
     rentDueDay: '',
     graceDays: '',
@@ -29,6 +29,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
   });
 
   const [uploadingLicense, setUploadingLicense] = useState(false);
+  const [formError, setFormError] = useState('');
   const licenseInputRef = useRef(null);
 
   // Pre-fill if editing
@@ -77,7 +78,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
       leaseEnd: '',
       monthlyRent: '',
       securityDeposit: '',
-      status: 'pending',
+      status: 'active',
       licensePhotoUrl: '',
       rentDueDay: '',
       graceDays: '',
@@ -106,14 +107,9 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
   };
 
   const handleSave = () => {
-    if (!formData.firstName.trim()) {
-      alert('First name is required');
-      return;
-    }
-    if (needsPropertyPicker && !selectedPropertyId) {
-      alert('Please select a property');
-      return;
-    }
+    if (!formData.firstName.trim()) { setFormError('First name is required'); return; }
+    if (needsPropertyPicker && !selectedPropertyId) { setFormError('Please select a property'); return; }
+    setFormError('');
     const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
     onSave({
       ...formData,
@@ -410,6 +406,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-800/50 border-t border-white/15">
+          {formError && <span className="mr-auto text-sm text-red-400">{formError}</span>}
           {tenant && onDelete && (
             <button
               onClick={() => onDelete(tenant)}

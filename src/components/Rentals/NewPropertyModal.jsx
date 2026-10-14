@@ -34,6 +34,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
 
   const [photoPreview, setPhotoPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Pre-fill if editing
   useEffect(() => {
@@ -124,10 +125,8 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
   };
 
   const handleSave = () => {
-    if (!formData.name.trim()) {
-      alert('Property name is required');
-      return;
-    }
+    if (!formData.name.trim()) { setFormError('Property name is required'); return; }
+    setFormError('');
     onSave(formData);
   };
 
@@ -593,6 +592,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-800/50 border-t border-white/15">
+          {formError && <span className="mr-auto text-sm text-red-400">{formError}</span>}
           <button
             onClick={onClose}
             className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"

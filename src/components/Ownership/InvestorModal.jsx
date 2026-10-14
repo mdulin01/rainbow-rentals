@@ -66,7 +66,7 @@ export default function InvestorModal({ investor, onSave, onDelete, onClose }) {
                 type="text"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="e.g., Liam"
+                placeholder="Investor name"
                 className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50"
                 autoFocus
               />
@@ -77,7 +77,7 @@ export default function InvestorModal({ investor, onSave, onDelete, onClose }) {
                 type="email"
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="dulinliam@gmail.com"
+                placeholder="investor@example.com"
                 className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50"
               />
             </div>

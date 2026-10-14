@@ -410,14 +410,14 @@ const AddTaskModal = React.memo(({
             />
           </div>
 
-          {/* Assigned To */}
+          {/* Assigned To/}
           <div>
             <label className="block text-sm font-medium text-white/70 mb-2 flex items-center gap-2">
               <User className="w-4 h-4" />
               Assigned To *
             </label>
             <div className="flex gap-2">
-              {['Mike', 'Liam', 'Both'].map(person => (
+              {['Mike'].map(person => (
                 <button
                   key={person}
                   onClick={() => updateField('assignedTo', person)}

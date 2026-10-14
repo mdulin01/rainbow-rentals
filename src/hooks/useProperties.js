@@ -66,7 +66,7 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
           const currentTenants = getPropertyTenants(p);
 
           let newTenants;
-          if (tenantData.id && tenantData.id !== 'legacy') {
+          if (tenantData.id && !String(tenantData.id).startsWith('legacy')) {
             // Update existing tenant
             newTenants = currentTenants.map(t =>
               String(t.id) === String(tenantData.id) ? { ...t, ...tenantData } : t
@@ -75,12 +75,12 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
             // Add new tenant (assign ID, strip legacy id)
             const newTenant = { ...tenantData, id: Date.now().toString() };
             delete newTenant._isNew;
-            newTenants = [...currentTenants.filter(t => t.id !== 'legacy'), newTenant];
+            newTenants = [...currentTenants.filter(t => !String(t.id).startsWith('legacy')), newTenant];
             // If editing the legacy tenant, replace it
-            if (tenantData.id === 'legacy') {
+            if (String(tenantData.id).startsWith('legacy')) {
               newTenants = [{ ...tenantData, id: Date.now().toString() }];
               // Re-add any non-legacy tenants
-              const nonLegacy = currentTenants.filter(t => t.id !== 'legacy');
+              const nonLegacy = currentTenants.filter(t => !String(t.id).startsWith('legacy'));
               newTenants = [...newTenants, ...nonLegacy];
             }
           }

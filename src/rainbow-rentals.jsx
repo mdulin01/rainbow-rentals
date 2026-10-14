@@ -83,7 +83,7 @@ import BuildInfo from './components/BuildInfo';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
-import { requestPushToken } from './messaging';
+import { requestPushToken, listenForeground } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
 
@@ -134,8 +134,18 @@ export default function RainbowRentals() {
   const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
   const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
   const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
-  const [expenseReviewItems, setExpenseReviewItems] = useState([]); // Liam-named bank txns + Mike's rental-tagged (mikes-money push)
+  const [expenseReviewItems, setExpenseReviewItems] = useState([]); // bank txns pushed from mikes-money for review
   const [dashboardReportYear, setDashboardReportYear] = useState(new Date().getFullYear());
+  // Foreground pushes (app open) arrive here instead of the system tray — show them as a toast.
+  useEffect(() => {
+    if (!user) return;
+    listenForeground((payload) => {
+      const n = payload?.notification || {};
+      showToast && showToast(`${n.title || 'Rainbow Rentals'}${n.body ? ' — ' + n.body : ''}`, 'info');
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const enableAlerts = async () => {
     const r = await requestPushToken();
     if (r.ok && user) {
@@ -230,8 +240,8 @@ export default function RainbowRentals() {
   // every downstream `properties/rentPayments/expenses/documents/transactions/sharedTasks`
   // is the filtered view for a restricted owner; full managers (no match) see everything. ----
   const _accessMatch = propertyAccess[(user?.email || '').toLowerCase()];
-  const canManage = !_accessMatch; // Mike/Liam can edit rents/leases/expenses; restricted owners can't
-  const _match = (p) => `${p.name || ''} ${p.address || ''}`.toLowerCase().includes(_accessMatch);
+  const canManage = !_accessMatch; // managers can edit rents/leases/expenses; restricted owners can't
+  const _match = (p) => `${p.name || ''} ${p.street || ''} ${p.city || ''}`.toLowerCase().includes(_accessMatch);
   const properties = _accessMatch ? _allProperties.filter(_match) : _allProperties;
   const _visibleIds = new Set(properties.map((p) => String(p.id)));
   const _inScope = (pid) => _visibleIds.has(String(pid));
@@ -380,7 +390,7 @@ export default function RainbowRentals() {
     const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `rainbow-reality-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.href = url; a.download = `rainbow-rentals-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click(); URL.revokeObjectURL(url);
     logActivity('export', 'full JSON export downloaded');
     showToast('Export downloaded', 'success');
@@ -441,7 +451,7 @@ export default function RainbowRentals() {
         const isOwnerUser = ownerEmails.includes(userEmail);
         setIsOwner(isOwnerUser);
         if (isOwnerUser) {
-          const displayName = userEmail?.includes('mdulin') ? 'Mike' : userEmail?.includes('adam') ? 'Adam' : 'Liam';
+          const displayName = userEmail?.includes('mdulin') ? 'Mike' : userEmail?.includes('adam') ? 'Adam' : userEmail?.includes('liam') ? 'Liam' : (userEmail || '').split('@')[0];
           setCurrentUser(displayName);
         }
       } else {
@@ -660,7 +670,7 @@ export default function RainbowRentals() {
             console.log('[expenses] Skipping onSnapshot from our own save');
             return;
           }
-          if (data.expenses && data.expenses.length > 0) {
+          if (Array.isArray(data.expenses) && (data.expenses.length > 0 || data.clearedAt)) {
             console.log('[expenses] onSnapshot: applying', data.expenses.length, 'expenses to state');
             setExpenses(data.expenses);
           } else {
@@ -919,17 +929,11 @@ export default function RainbowRentals() {
     const results = [];
 
     sharedTasks.filter(t => t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))
-      .forEach(t => results.push({ type: 'task', item: t, section: 'home' }));
-    sharedLists.filter(l => l.title?.toLowerCase().includes(q))
-      .forEach(l => results.push({ type: 'list', item: l, section: 'home' }));
-    sharedIdeas.filter(i => i.title?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q))
-      .forEach(i => results.push({ type: 'idea', item: i, section: 'home' }));
-    properties.filter(p => p.name?.toLowerCase().includes(q) || p.address?.street?.toLowerCase().includes(q) || getPropertyTenants(p).some(t => t.name?.toLowerCase().includes(q)))
+      .forEach(t => results.push({ type: 'task', item: t, section: 'action-items' }));
+    properties.filter(p => p.name?.toLowerCase().includes(q) || (p.street || '').toLowerCase().includes(q) || getPropertyTenants(p).some(t => t.name?.toLowerCase().includes(q)))
       .forEach(p => results.push({ type: 'property', item: p, section: 'rentals' }));
     documents.filter(d => d.title?.toLowerCase().includes(q) || d.notes?.toLowerCase().includes(q))
       .forEach(d => results.push({ type: 'document', item: d, section: 'documents' }));
-    transactions.filter(t => t.description?.toLowerCase().includes(q))
-      .forEach(t => results.push({ type: 'transaction', item: t, section: 'financials' }));
     rentPayments.filter(r => (r.tenantName || '').toLowerCase().includes(q) || (r.propertyName || '').toLowerCase().includes(q) || (r.month || '').includes(q))
       .forEach(r => results.push({ type: 'rent', item: r, section: 'rent' }));
     expenses.filter(e => (e.description || '').toLowerCase().includes(q) || (e.vendor || '').toLowerCase().includes(q) || (e.propertyName || '').toLowerCase().includes(q))
@@ -969,7 +973,7 @@ export default function RainbowRentals() {
         <div className="max-w-sm w-full bg-white/[0.04] border border-white/10 rounded-3xl p-8 text-center">
           <div className="text-5xl mb-4">🌈</div>
           <h1 className="text-xl font-bold text-white mb-2">This app is private</h1>
-          <p className="text-sm text-white/50 mb-6">You're signed in as {user.email}, which doesn't have access to Rainbow Reality. Ask Michael if you think you should.</p>
+          <p className="text-sm text-white/50 mb-6">You're signed in as {user.email}, which doesn't have access to Rainbow Rentals. Ask Michael if you think you should.</p>
           <button onClick={handleLogout} className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Sign out</button>
         </div>
       </div>
@@ -1083,7 +1087,7 @@ export default function RainbowRentals() {
                 <div className="w-9 h-9 bg-gradient-to-br from-red-500 via-green-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                   <span className="text-sm font-bold text-white">RR</span>
                 </div>
-                <h1 className="text-lg font-bold text-white leading-tight">Rainbow Reality</h1>
+                <h1 className="text-lg font-bold text-white leading-tight">Rainbow Rentals</h1>
               </div>
               {/* Desktop nav tabs */}
               <nav className="hidden md:flex items-center gap-1 ml-6">
@@ -1801,6 +1805,9 @@ export default function RainbowRentals() {
                       onRecord={(prefill) => setShowAddRentModal(prefill)}
                       onPatchLog={patchComm}
                       onSendSms={sendSmsViaServer}
+                      onEnableAlerts={enableAlerts}
+                      pushState={pushState}
+                      incomeActuals={incomeActuals}
                     />
                   </div>
 
@@ -1836,7 +1843,7 @@ export default function RainbowRentals() {
                                   propertyId: patch.propertyId || '',
                                   propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
                                   category: patch.category,
-                                  description: item.description + (item.reason === 'liam' ? ' (Liam)' : ''),
+                                  description: item.description,
                                   amount: item.amount,
                                   date: item.date,
                                   source: 'mikes-money-review',
@@ -1886,7 +1893,7 @@ export default function RainbowRentals() {
                             {recent.length > 8 && <div className="text-[11px] text-white/25">…and {recent.length - 8} more</div>}
                           </div>
                         )}
-                        {recent.length === 0 && <p className="text-xs text-white/30">Change history starts now — edits by you and Liam will appear here.</p>}
+                        {recent.length === 0 && <p className="text-xs text-white/30">Change history starts now — your edits will appear here.</p>}
                       </div>
                     );
                   })()}
@@ -1978,11 +1985,11 @@ export default function RainbowRentals() {
                     return (
                       <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Active Properties</h3>
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Checklists</h3>
                           <button onClick={() => setShowChecklistInitModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ New</button>
                         </div>
                         {activeChecklists.length === 0 ? (
-                          <p className="text-center text-white/30 py-6">No active properties</p>
+                          <p className="text-center text-white/30 py-6">No checklists in progress</p>
                         ) : (
                           <div className="space-y-2">
                             {activeChecklists.map(list => {
@@ -2747,7 +2754,7 @@ function ExpenseReviewCard({ item, properties, onApprove, onDismiss }) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-sky-300 truncate">{item.description}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 shrink-0">
-              {item.reason === 'liam' ? '👷 Liam' : item.reason === 'fifth-third' ? '🏦 5/3 acct' : '🏘️ tagged rental'}
+              {item.reason === 'liam' ? '🏦 bank txn' : item.reason === 'fifth-third' ? '🏦 5/3 acct' : '🏘️ tagged rental'}
             </span>
           </div>
           <div className="text-xs text-white/40 mt-0.5">{formatDate(item.date)}{item.detail && item.detail !== item.description ? ` · ${item.detail.slice(0, 60)}` : ''}</div>

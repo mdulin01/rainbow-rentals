@@ -132,12 +132,12 @@ export function sanitizeForFirestore(obj) {
  * Directly save expenses to Firestore. No refs, no indirection.
  * Returns true on success, false on failure.
  */
-async function saveExpensesDirect(db, expenses, currentUser) {
+async function saveExpensesDirect(db, expenses, currentUser, { allowEmpty = false } = {}) {
   if (!db) {
     console.error('[expenses] saveExpensesDirect: no db instance!');
     return false;
   }
-  if (!expenses || expenses.length === 0) {
+  if (!expenses || (expenses.length === 0 && !allowEmpty)) {
     console.error('[expenses] saveExpensesDirect: refusing to save empty array');
     return false;
   }
@@ -151,6 +151,7 @@ async function saveExpensesDirect(db, expenses, currentUser) {
       lastUpdated: new Date().toISOString(),
       updatedBy: currentUser || 'unknown',
       saveId: saveId,
+      ...(cleanExpenses.length === 0 ? { clearedAt: new Date().toISOString() } : {}),
     }, { merge: true });
     console.log('[expenses] saveExpensesDirect: SUCCESS');
     return true;
@@ -199,9 +200,7 @@ export const useExpenses = (db, currentUser, showToast) => {
   const deleteExpense = useCallback((expenseId) => {
     setExpenses(prev => {
       const updated = prev.filter(e => e.id !== expenseId);
-      if (updated.length > 0) {
-        saveExpensesDirect(db, updated, currentUser);
-      }
+      saveExpensesDirect(db, updated, currentUser, { allowEmpty: true });
       return updated;
     });
     showToast('Expense deleted', 'info');

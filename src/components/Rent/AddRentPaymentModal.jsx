@@ -15,10 +15,11 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
     amount: '',
     datePaid: '',
     status: 'paid',
-    method: '',
+    method: 'Zelle',
     notes: '',
     lateFee: '',
   });
+  const [showTypes, setShowTypes] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -54,7 +55,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
         amount: payment.amount || (prop?.monthlyRent || ''),
         datePaid: payment.datePaid || today,
         status: payment.status || 'paid',
-        method: payment.method || tenants.find(t => t.preferredPayment)?.preferredPayment || '',
+        method: payment.method || tenants.find(t => t.preferredPayment)?.preferredPayment || 'Zelle',
       }));
     } else {
       setForm(f => ({ ...f, month: currentMonth, datePaid: today }));
@@ -100,9 +101,14 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
         </div>
 
         <div className="space-y-4">
-          {/* Income Type */}
+          {/* Income Type — rent by default; other types behind a tap */}
           <div>
             <label className="text-xs text-white/40 mb-1 block">Income Type</label>
+            {!showTypes && form.incomeType === 'rent' && !isEditing ? (
+              <button onClick={() => setShowTypes(true)} className="text-xs text-white/50 hover:text-white/80">
+                💰 Rent · <span className="underline">something else?</span>
+              </button>
+            ) : (
             <div className="flex flex-wrap gap-1.5">
               {incomeCategories.map(cat => (
                 <button
@@ -118,6 +124,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* Property */}

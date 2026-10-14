@@ -1,4 +1,4 @@
-// constants.js - Rainbow Reality constants
+// constants.js - Rainbow Rentals constants
 
 export const MAX_FILE_SIZE_MB = 10;
 export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -33,8 +33,8 @@ export const propertyTypes = [
 export const tenantStatuses = [
   { value: 'active', label: 'Active', color: 'text-green-400' },
   { value: 'pending', label: 'Pending', color: 'text-yellow-400' },
-  { value: 'vacant', label: 'Vacant', color: 'text-red-400' },
   { value: 'notice', label: 'Notice Given', color: 'text-orange-400' },
+  { value: 'former', label: 'Former', color: 'text-white/40' },
 ];
 
 // Property status options
@@ -188,7 +188,6 @@ export const LEASING_TEMPLATE_ITEMS = [
   { text: 'New listing photos taken', icon: '📸' },
   { text: 'Listing description written', icon: '📝' },
   { text: 'Rent price set', icon: '🏷️' },
-  { text: 'Listed on Avail', icon: '📣' },
   { text: 'Listed on Zillow / Apartments.com', icon: '🌐' },
   { text: 'Posted to Facebook Marketplace / groups', icon: '📱' },
   { text: 'Yard / window sign posted', icon: '🪧' },
@@ -238,7 +237,7 @@ export const propertyColors = [
 ];
 
 // How a tenant pays rent (recorded on each payment; preferred channel on the tenant)
-export const paymentMethods = ['Zelle', 'Avail', 'Money order', 'Check', 'Cash', 'Other'];
+export const paymentMethods = ['Zelle', 'Check', 'Money order', 'Cash', 'Other'];
 
 // Rent reminder templates. Placeholders: {first} {amount} {property} {month} {dueDate}
 // {balance} {lateFeeLine} {payInstructions} {from}

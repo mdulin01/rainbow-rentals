@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // Sell-vs-hold analyzer — computes from the property records (purchase date/price,
 // value, mortgage) + the expense ledger (recurring operating costs). Mirrors the
-// analyzer in Mike's Money but lives on RR data so Liam sees the same picture.
+// analyzer in Mike's Money but lives on RR data so the app shows the same picture.
 // Not advice — a decision aid. Confirm depreciation/basis with the CPA.
 
 const fmt = (n) => (parseFloat(n) || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -80,7 +80,7 @@ export default function SellVsHold({ db, properties, expenses, canManage, curren
       const v = r.edge > 15000 ? 'HOLD' : r.edge < -15000 ? 'SELL' : 'CLOSE CALL';
       return `• ${p.name}: bought ${p.purchaseDate.slice(0, 7)} for ${fmt(p.purchasePrice)}, value ${fmt(p.value)}, loan ${fmt(p.loan)} @${(p.rate * 100).toFixed(2)}%, rent ${fmt(p.rent)}/mo, cash flow ${fmt(Math.round(r.cfYear1 / 12))}/mo, sell-now nets ${fmt(Math.round(r.sellNow.netProceeds))}, breakeven appreciation ${r.breakeven == null ? '>10' : (r.breakeven * 100).toFixed(1)}%/yr → ${v} (${r.edge >= 0 ? '+' : ''}${fmt(Math.round(r.edge))} vs selling)`;
     }).join('\n');
-    const prompt = `Rupert, review my rental sell-vs-hold analysis from Rainbow Reality:\n${lines}\nAssumptions: ${(a.altReturn * 100).toFixed(0)}% alternative return, ${a.horizon}-yr horizon, ${(a.sellingCostPct * 100).toFixed(0)}% selling costs, ${(a.appreciationRate * 100).toFixed(0)}% base appreciation, ${(a.maintenancePct * 100).toFixed(0)}% maintenance. Context: I'm 59½, starting IRA draws, and any sales should land before the 2029 IRMAA lookback window; Liam manages the properties. What's your read — which (if any) would you sell, in what order, and what am I missing?`;
+    const prompt = `Rupert, review my rental sell-vs-hold analysis from Rainbow Rentals:\n${lines}\nAssumptions: ${(a.altReturn * 100).toFixed(0)}% alternative return, ${a.horizon}-yr horizon, ${(a.sellingCostPct * 100).toFixed(0)}% selling costs, ${(a.appreciationRate * 100).toFixed(0)}% base appreciation, ${(a.maintenancePct * 100).toFixed(0)}% maintenance. Context: I'm 59½, starting IRA draws, and any sales should land before the 2029 IRMAA lookback window; I manage the properties myself now. What's your read — which (if any) would you sell, in what order, and what am I missing?`;
     window.open('https://mikeslife.app/?rupert=1&ask=' + encodeURIComponent(prompt), '_blank', 'noopener');
   };
 

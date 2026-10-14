@@ -22,7 +22,7 @@ const TaskCard = React.memo(({ task, onNavigateToLinked, getLinkedLabel }) => {
   const priority = priorityStyles[task.priority] || priorityStyles.low;
 
   const assigneeLower = (task.assignedTo || '').toLowerCase();
-  const assigneeLabel = assigneeLower === 'both' ? 'M & L' : assigneeLower === 'mike' ? 'M' : 'L';
+  const assigneeLabel = assigneeLower === 'both' ? 'M & L' : assigneeLower === 'liam' ? 'L' : 'M';
 
   // Swipe handlers
   const handleTouchStart = (e) => {

@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '../../utils';
 
 // Properties excluded from the pooled ownership/equity calc:
 // N. Church is Mike's own owner-occupied residence, Brookhurst is Adam Britten's home
-// (separate arrangement) — neither is part of the 4-property rental pool Liam invested in.
+// (separate arrangement) — neither is part of the rental pool investors hold a stake in.
 const EXCLUDED_PROPERTY_NAMES = ['n. church', 'brookhurst'];
 const isExcludedFromOwnership = (property) => {
   const name = (property.name || '').toLowerCase();

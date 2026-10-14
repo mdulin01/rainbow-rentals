@@ -17,7 +17,7 @@ const CHANNEL_ICON = { sms: MessageSquare, email: Mail, call: Phone, note: Stick
  */
 export default function RentDay({
   properties, rentPayments, commsLog = [], settings = {}, currentUser,
-  onSaveSettings, onCompose, onRecord, onPatchLog, onSendSms, canManage,
+  onSaveSettings, onCompose, onRecord, onPatchLog, onSendSms, onEnableAlerts, pushState, incomeActuals, canManage,
 }) {
   const [monthKey, setMonthKey] = useState(currentMonthKey());
   const [showSettings, setShowSettings] = useState(false);
@@ -39,6 +39,9 @@ export default function RentDay({
     outstanding: rows.reduce((s, r) => s + r.balance, 0),
     late: rows.filter(r => r.status !== 'paid' && r.phase === 'late').length,
   }), [rows]);
+  // Bank deposits for this month (written by the mikeslife bridge) vs what's recorded here.
+  const deposited = incomeActuals?.months?.[monthKey]?.total;
+  const recordedAll = rows.reduce((s, r) => s + r.paid, 0);
 
   const openSettings = () => {
     const a = settings.auto || {};
@@ -163,6 +166,15 @@ export default function RentDay({
           <p className={`text-xl font-bold ${totals.late > 0 ? 'text-red-400' : 'text-white/60'}`}>{totals.late}</p>
         </div>
       </div>
+
+      {typeof deposited === 'number' && (
+        <div className={`mb-4 rounded-2xl border px-4 py-2.5 flex items-center justify-between text-sm ${Math.abs(deposited - recordedAll) < 1 ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/40 bg-amber-500/10'}`}>
+          <span className="text-white/70">Bank: recorded <b className="text-white">{formatCurrency(recordedAll)}</b> · deposited <b className="text-white">{formatCurrency(deposited)}</b></span>
+          <span className={`font-bold ${Math.abs(deposited - recordedAll) < 1 ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {Math.abs(deposited - recordedAll) < 1 ? 'matched ✓' : `${deposited - recordedAll > 0 ? '+' : ''}${formatCurrency(deposited - recordedAll)}`}
+          </span>
+        </div>
+      )}
 
       {rows.length === 0 && (
         <div className="p-6 text-center text-white/40 text-sm bg-white/[0.03] border border-white/[0.06] rounded-2xl">
@@ -376,6 +388,19 @@ export default function RentDay({
                 </div>
               </div>
               <p className="text-[11px] text-white/30">Per-tenant values (on the tenant form) override these defaults.</p>
+
+              {onEnableAlerts && (
+                <div className="pt-3 border-t border-white/10">
+                  {pushState === 'granted' ? (
+                    <p className="text-sm text-emerald-300">🔔 Alerts are on for this device.</p>
+                  ) : (
+                    <button onClick={onEnableAlerts} className="w-full px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">
+                      🔔 Enable alerts on this device
+                    </button>
+                  )}
+                  <p className="text-[11px] text-white/30 mt-1">A push when a tenant texts back and when scheduled reminders go out. On iPhone, open the app from the home screen first.</p>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-white/10 space-y-3">
                 <label className="flex items-center gap-3 cursor-pointer">

@@ -8,7 +8,7 @@ import { formatCurrency, formatDate, monthName, rentDueDateStr, fillTemplate, pa
 export const getPropertyTenants = (property) => {
   if (!property) return [];
   if (Array.isArray(property.tenants) && property.tenants.length > 0) return property.tenants;
-  if (property.tenant && property.tenant.name) return [{ id: 'legacy', ...property.tenant }];
+  if (property.tenant && property.tenant.name) return [{ id: `legacy-${property.id}`, ...property.tenant }];
   return [];
 };
 
@@ -202,7 +202,7 @@ export const matchPropertyByAddress = (address, properties) => {
   const a = norm(address);
   if (!a) return null;
   return properties.find(p => {
-    const n = norm(p.name), ad = norm(p.address);
+    const n = norm(p.name), ad = norm(`${p.street || ''} ${p.city || ''}`);
     return (ad && (a.includes(ad) || ad.includes(a))) || (n && n.length > 2 && a.includes(n));
   }) || null;
 };

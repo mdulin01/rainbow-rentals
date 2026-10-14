@@ -1,5 +1,5 @@
 /**
- * Centralized theme configuration for Rainbow Reality
+ * Centralized theme configuration for Rainbow Rentals
  */
 
 export const colors = {

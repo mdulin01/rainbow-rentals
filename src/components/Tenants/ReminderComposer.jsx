@@ -6,7 +6,7 @@ import { getLeaseTerms, reminderVars, renderReminder } from '../../rentLogic.js'
 
 /**
  * ReminderComposer — pick a template, tweak the text, then open Messages / Mail with it
- * pre-filled (no backend: the text goes out from Mike's or Liam's own phone). Every send
+ * pre-filled (no backend: the text goes out from the manager's own phone). Every send
  * is logged to rentalData/comms so both operators can see who was contacted and when.
  *
  * target: { property, tenant, monthKey, templateId, amountDue, balance }

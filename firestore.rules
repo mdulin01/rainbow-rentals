@@ -1,11 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isManager() {
+      return request.auth != null &&
+        request.auth.token.email in ['mdulin@gmail.com', 'dulinliam@gmail.com'];
+    }
+    // Restricted owners (per-property view in the app) can read but never write.
+    function isOwner() {
+      return isManager() ||
+        (request.auth != null && request.auth.token.email in ['adamjosephbritten@gmail.com']);
+    }
 
-    // Rental data — only authorized users
+    // Rental data (properties, rent, expenses, docs index, comms log, backups…)
     match /rentalData/{docId} {
-      allow read, write: if request.auth != null &&
-        request.auth.token.email in ['mdulin@gmail.com', 'adamjosephbritten@gmail.com', 'dulinliam@gmail.com'];
+      allow read: if isOwner();
+      allow write: if isManager();
+    }
+
+    // Web-push tokens: each signed-in owner manages only their own device record.
+    match /pushTokens/{uid} {
+      allow read, write: if isOwner() && request.auth.uid == uid;
+    }
+
+    // Rupert's note (written by the mikeslife bridge with admin credentials).
+    match /rupert/{docId} {
+      allow read: if isOwner();
     }
   }
 }
