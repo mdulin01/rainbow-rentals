@@ -243,7 +243,7 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
               const label = f.lateOnly ? 'Late' : f.state === 'missing' ? 'Missing' : 'Short';
               const color = f.lateOnly ? 'text-orange-400' : f.state === 'missing' ? 'text-red-400' : 'text-yellow-400';
               const detail = f.lateOnly
-                ? `Collected ${formatCurrency(f.received)} after the ${GRACE_DAY}th`
+                ? `Collected ${formatCurrency(f.received)} after the grace period`
                 : f.state === 'missing'
                   ? `No payment recorded — ${formatCurrency(f.expected)} expected`
                   : `${formatCurrency(f.received)} of ${formatCurrency(f.expected)} (${formatCurrency(f.expected - f.received)} short)`;

@@ -67,7 +67,7 @@ Redeploy after adding them. The daily cron (`/api/cron/reminders`, 10:00 ET) is 
 
 ## 6. Turn it on in the app
 
-Tenants → 📣 Rent Day → ⚙️:
+Home → 📣 Rent Day → ⚙️:
 1. Payment instructions + sign-off name.
 2. ☑ **Send texts through Twilio**. The composer's main button becomes "Send text";
    "My phone" stays as a fallback.

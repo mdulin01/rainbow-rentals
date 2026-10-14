@@ -3,11 +3,7 @@ import { ArrowLeft, Edit3, MapPin, User, DollarSign, Calendar, Phone, Mail, File
 import { tenantStatuses, capitalConditions } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
 import { leaseState } from '../../rentLogic.js';
-
-const formatCurrency = (amount) => {
-  const num = parseFloat(amount) || 0;
-  return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-};
+import { formatCurrency } from '../../utils';
 
 const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAddTenant, onRemoveTenant, onUpdateProperty, expenses = [], rentPayments = [] }) => {
   const [activeTab, setActiveTab] = useState('overview');

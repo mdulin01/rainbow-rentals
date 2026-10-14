@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
-import { formatDate, formatCurrency, currentMonthKey, todayLocalStr } from '../../utils';
+import { formatDate, formatCurrency, currentMonthKey, todayLocalStr, monthName } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
 import { computeRentRows } from '../../rentLogic.js';
 
@@ -127,7 +127,7 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
           <p className="text-xl font-bold text-white">{formatCurrency(totalExpected)}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Collected ({currentMonth})</p>
+          <p className="text-white/40 text-xs mb-1">Collected ({monthName(currentMonthKey())})</p>
           <p className="text-xl font-bold text-emerald-400">{formatCurrency(collected)}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">

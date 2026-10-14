@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, X, Search, LogOut, User, Loader, MoreVertical, ChevronDown, Edit3, Trash2, Eye, DollarSign, MapPin, Calendar, FileText, CheckSquare, HelpCircle } from 'lucide-react';
+import { Plus, Search, LogOut, Loader, ChevronDown, HelpCircle } from 'lucide-react';
 
 // Constants and utilities
-import {
-  ownerEmails, propertyAccess, propertyTypes, propertyColors, documentTypes,
-  expenseCategories, incomeCategories, taskPriorities, timeHorizons,
-  listCategories, ideaCategories, tenantStatuses, rentStatuses
-} from './constants';
+import { ownerEmails, propertyAccess, documentTypes, expenseCategories, timeHorizons } from './constants';
 import {
   formatDate, formatCurrency, validateFileSize, isHeicFile, getSafeFileName,
-  isTaskDueToday, isTaskDueThisWeek, taskMatchesHorizon, getDaysUntil, getLeaseStatus, todayLocalStr
+  taskMatchesHorizon
 } from './utils';
 
 // Components
@@ -22,8 +18,6 @@ import AddTaskModal from './components/SharedHub/AddTaskModal';
 import SharedListModal from './components/SharedHub/SharedListModal';
 import AddIdeaModal from './components/SharedHub/AddIdeaModal';
 import TaskCard from './components/SharedHub/TaskCard';
-import ListCard from './components/SharedHub/ListCard';
-import IdeaCard from './components/SharedHub/IdeaCard';
 
 // Checklist components
 import ChecklistInitModal from './components/Checklists/ChecklistInitModal';
@@ -34,7 +28,6 @@ import PropertyCard from './components/Rentals/PropertyCard';
 import NewPropertyModal from './components/Rentals/NewPropertyModal';
 import PropertyDetail from './components/Rentals/PropertyDetail';
 import SellVsHold from './components/Rentals/SellVsHold';
-import PropertyFinancialBreakdownModal from './components/Rentals/PropertyFinancialBreakdownModal';
 import TenantModal from './components/Rentals/TenantModal';
 
 // Ownership components
@@ -61,17 +54,11 @@ import DocumentCard from './components/Documents/DocumentCard';
 import AddDocumentModal from './components/Documents/AddDocumentModal';
 import DocumentViewer from './components/Documents/DocumentViewer';
 
-// Financials components (kept for backward compat)
-import TransactionCard from './components/Financials/TransactionCard';
-import AddTransactionModal from './components/Financials/AddTransactionModal';
-import FinancialSummary from './components/Financials/FinancialSummary';
-
 // Hooks
 import { useSharedHub } from './hooks/useSharedHub';
-import { useProperties, getPropertyTenants, getLeaseTerms } from './hooks/useProperties';
+import { useProperties, getPropertyTenants } from './hooks/useProperties';
 import { leaseAlerts } from './rentLogic.js';
 import { useDocuments } from './hooks/useDocuments';
-import { useFinancials } from './hooks/useFinancials';
 import { useRent } from './hooks/useRent';
 import { useExpenses, autoCreateRecurringExpenses, sanitizeForFirestore } from './hooks/useExpenses';
 import { useOwnership } from './hooks/useOwnership';
@@ -83,7 +70,7 @@ import BuildInfo from './components/BuildInfo';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction, arrayUnion } from 'firebase/firestore';
 import { requestPushToken, listenForeground } from './messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
@@ -103,6 +90,23 @@ const RainbowBar = () => (
   <div className="h-1 w-full bg-gradient-to-r from-red-500 via-yellow-400 via-green-500 via-blue-500 to-purple-500" />
 );
 
+
+// App sections. `dock: true` = in the 5-slot phone dock; everything is in the desktop nav
+// and the phone dropdown. Deep-link with ?section=<id>.
+const SECTIONS = [
+  { id: 'action-items', label: 'Home', short: 'Home', emoji: '✅', dock: true, gradient: 'from-indigo-400 to-purple-500' },
+  { id: 'rentals', label: 'Properties', short: 'Props', emoji: '🏠', dock: true, gradient: 'from-teal-400 to-cyan-500' },
+  { id: 'tenants', label: 'Tenants', short: 'Tenants', emoji: '👤', dock: true, gradient: 'from-blue-400 to-indigo-500' },
+  { id: 'expenses', label: 'Expenses', short: 'Costs', emoji: '💸', dock: true, gradient: 'from-red-400 to-rose-500' },
+  { id: 'money', label: 'Money', short: 'Money', emoji: '💰', dock: true, gradient: 'from-emerald-400 to-green-500' },
+  { id: 'ownership', label: 'Ownership', short: 'Own', emoji: '🤝', dock: false, gradient: 'from-amber-400 to-yellow-500' },
+  { id: 'documents', label: 'Documents', short: 'Docs', emoji: '📄', dock: false, gradient: 'from-amber-400 to-orange-500' },
+];
+const MONEY_VIEWS = [
+  { id: 'pnl', label: 'P&L', emoji: '📊' },
+  { id: 'grid', label: 'Rent grid', emoji: '⚖️' },
+  { id: 'ledger', label: 'Ledger', emoji: '🧾' },
+];
 
 export default function RainbowRentals() {
   // ========== AUTH STATE ==========
@@ -126,9 +130,9 @@ export default function RainbowRentals() {
 
   // ========== NAVIGATION ==========
   const [activeSection, setActiveSection] = useState('action-items');
+  const [moneyView, setMoneyView] = useState('pnl'); // Money tab: pnl | grid | ledger
   const [currentUser, setCurrentUser] = useState('Mike');
   const [isOwner, setIsOwner] = useState(false);
-  const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
   const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
@@ -169,7 +173,6 @@ export default function RainbowRentals() {
   const saveSharedHubRef = useRef(() => {});
   const savePropertiesRef = useRef(() => {});
   const saveDocumentsRef = useRef(() => {});
-  const saveFinancialsRef = useRef(() => {});
   const saveRentRef = useRef(() => {});
   const saveOwnershipRef = useRef(() => {});
   const expensesSaveIdRef = useRef(null); // Track our own saves to avoid onSnapshot overwrite
@@ -179,11 +182,9 @@ export default function RainbowRentals() {
   const {
     sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
     addTask, updateTask, deleteTask, completeTask, highlightTask,
-    addList, updateList, deleteList, addListItem, toggleListItem, deleteListItem, highlightList,
-    addIdea, updateIdea, deleteIdea, highlightIdea,
-    hubSubView, setHubSubView, hubTaskFilter, setHubTaskFilter, hubTaskSort, setHubTaskSort,
-    hubListFilter, setHubListFilter, hubIdeaFilter, setHubIdeaFilter, hubIdeaStatusFilter, setHubIdeaStatusFilter,
-    collapsedSections, toggleDashSection,
+    addList, updateList, addListItem, toggleListItem, deleteListItem,
+    addIdea, updateIdea,
+    hubTaskFilter, setHubTaskFilter, hubTaskSort, setHubTaskSort,
     setSharedTasks, setSharedLists, setSharedIdeas,
     showAddTaskModal, setShowAddTaskModal,
     showSharedListModal, setShowSharedListModal,
@@ -201,26 +202,24 @@ export default function RainbowRentals() {
     addOrUpdateTenant: _addOrUpdateTenant, removeTenant: _removeTenant,
   } = propertiesHook;
 
+  // Single navigation entry point: every tab/dock/deep-link/search goes through here.
+  const goTo = useCallback((id, opts = {}) => {
+    if (!SECTIONS.some(sec => sec.id === id)) id = 'action-items';
+    setActiveSection(id);
+    if (id === 'rentals') { setSelectedProperty(null); setPropertyViewMode(opts.propertyView || 'grid'); }
+    if (id === 'money' && opts.moneyView) setMoneyView(opts.moneyView);
+    setShowMobileSectionDropdown(false);
+    setShowSearch(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const documentsHook = useDocuments(currentUser, saveDocumentsRef.current, showToast);
   const {
     documents: _allDocuments, setDocuments,
     documentViewMode, setDocumentViewMode,
-    documentTypeFilter, setDocumentTypeFilter,
-    documentPropertyFilter, setDocumentPropertyFilter,
     showAddDocumentModal, setShowAddDocumentModal,
     addDocument: _addDocument, updateDocument: _updateDocument, deleteDocument: _deleteDocument,
   } = documentsHook;
-
-  const financialsHook = useFinancials(currentUser, saveFinancialsRef.current, showToast);
-  const {
-    transactions: _allTxns, setTransactions,
-    financialViewMode, setFinancialViewMode,
-    transactionTypeFilter, setTransactionTypeFilter,
-    transactionPropertyFilter, setTransactionPropertyFilter,
-    showAddTransactionModal, setShowAddTransactionModal,
-    addTransaction: _addTransaction, updateTransaction: _updateTransaction, deleteTransaction: _deleteTransaction,
-    getTotalIncome, getTotalExpenses, getProfit, getMonthlyBreakdown, getPropertyBreakdown, getFilteredTransactions,
-  } = financialsHook;
 
   const rentHook = useRent(currentUser, saveRentRef.current, showToast);
   const {
@@ -238,7 +237,7 @@ export default function RainbowRentals() {
   } = expensesHook;
 
   // ---- Per-property owner access (e.g. Adam → only Brookhurst). Single choke-point:
-  // every downstream `properties/rentPayments/expenses/documents/transactions/sharedTasks`
+  // every downstream `properties/rentPayments/expenses/documents/sharedTasks`
   // is the filtered view for a restricted owner; full managers (no match) see everything. ----
   const _accessMatch = propertyAccess[(user?.email || '').toLowerCase()];
   const canManage = !_accessMatch; // managers can edit rents/leases/expenses; restricted owners can't
@@ -249,7 +248,6 @@ export default function RainbowRentals() {
   const rentPayments = _accessMatch ? _allRent.filter((r) => _inScope(r.propertyId)) : _allRent;
   const expenses = _accessMatch ? _allExpenses.filter((e) => _inScope(e.propertyId)) : _allExpenses;
   const documents = _accessMatch ? _allDocuments.filter((d) => _inScope(d.propertyId)) : _allDocuments;
-  const transactions = _accessMatch ? _allTxns.filter((t) => _inScope(t.propertyId)) : _allTxns;
   const sharedTasks = _accessMatch ? _allTasks.filter((t) => _inScope(t.linkedTo?.propertyId)) : _allTasks;
   const sharedLists = _accessMatch ? _allLists.filter((l) => _inScope(l.linkedTo?.itemId)) : _allLists;
 
@@ -267,25 +265,35 @@ export default function RainbowRentals() {
   const [commsSettings, setCommsSettings] = useState({});
   const [commsLog, setCommsLog] = useState([]);
   const [showReminder, setShowReminder] = useState(null); // { property, tenant, monthKey, templateId, ... }
-  const commsLogRef = useRef([]);
-  useEffect(() => { commsLogRef.current = commsLog; }, [commsLog]);
-
+  // Message log writes go through a transaction so two devices (or the server cron and
+  // the phone) can't overwrite each other's entries. Local state is updated optimistically;
+  // the onSnapshot above reconciles.
+  const commsRef = doc(db, 'rentalData', 'comms');
   const logComm = useCallback(async (entry) => {
     if (!user) return;
-    const next = [entry, ...commsLogRef.current].slice(0, 500);
-    setCommsLog(next);
+    setCommsLog(prev => [entry, ...prev.filter(e => e.id !== entry.id)].slice(0, 500));
     try {
-      await setDoc(doc(db, 'rentalData', 'comms'), JSON.parse(JSON.stringify({ log: next, lastUpdated: entry.at })), { merge: true });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(commsRef);
+        const log = snap.exists() && Array.isArray(snap.data().log) ? snap.data().log : [];
+        const next = [entry, ...log.filter(e => e.id !== entry.id)].slice(0, 500);
+        tx.set(commsRef, JSON.parse(JSON.stringify({ log: next, lastUpdated: entry.at })), { merge: true });
+      });
     } catch (e) { console.error('comms save:', e); showToast && showToast('Message not logged — ' + e.message, 'error'); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const patchComm = useCallback(async (id, patch) => {
-    const next = commsLogRef.current.map(e => e.id === id ? { ...e, ...patch } : e);
-    setCommsLog(next);
+    setCommsLog(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e));
     try {
-      await setDoc(doc(db, 'rentalData', 'comms'), JSON.parse(JSON.stringify({ log: next, lastUpdated: new Date().toISOString() })), { merge: true });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(commsRef);
+        const log = snap.exists() && Array.isArray(snap.data().log) ? snap.data().log : [];
+        const next = log.map(e => e.id === id ? { ...e, ...patch } : e);
+        tx.set(commsRef, JSON.parse(JSON.stringify({ log: next, lastUpdated: new Date().toISOString() })), { merge: true });
+      });
     } catch (e) { console.error('comms patch:', e); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Send a text through the server (Twilio). The function logs to rentalData/comms itself;
@@ -364,9 +372,6 @@ export default function RainbowRentals() {
   const addDocument = useCallback((d) => { _addDocument(d); logActivity('document.add', d.name || d.type); }, [_addDocument, logActivity]);
   const updateDocument = useCallback((id, u) => { _updateDocument(id, u); logActivity('document.update', id); }, [_updateDocument, logActivity]);
   const deleteDocument = useCallback((id) => { const it = documents.find(x => x.id === id); if (it) { const { fileData, ...meta } = it; trashItem('document', it.fileData && String(it.fileData).length > 400000 ? meta : it); } _deleteDocument(id); logActivity('document.delete', it?.name || id); }, [_deleteDocument, documents, trashItem, logActivity]);
-  const addTransaction = useCallback((t) => { _addTransaction(t); logActivity('transaction.add', `${t.description || t.type} $${t.amount}`); }, [_addTransaction, logActivity]);
-  const updateTransaction = useCallback((id, u) => { _updateTransaction(id, u); logActivity('transaction.update', id); }, [_updateTransaction, logActivity]);
-  const deleteTransaction = useCallback((id) => { const it = transactions.find(x => x.id === id); if (it) trashItem('transaction', it); _deleteTransaction(id); logActivity('transaction.delete', `${it?.description || ''} $${it?.amount || ''}`); }, [_deleteTransaction, transactions, trashItem, logActivity]);
 
   const restoreTrashItem = useCallback((item) => {
     const p = item.payload || {};
@@ -374,18 +379,17 @@ export default function RainbowRentals() {
     else if (item.type === 'expense') _addExpense(p);
     else if (item.type === 'property') _addProperty(p);
     else if (item.type === 'document') _addDocument(p);
-    else if (item.type === 'transaction') _addTransaction(p);
     removeFromTrash(item.trashId);
     logActivity('restore', `${item.type}: ${p.name || p.description || p.propertyName || ''}`);
-  }, [_addRentPayment, _addExpense, _addProperty, _addDocument, _addTransaction, removeFromTrash, logActivity]);
+  }, [_addRentPayment, _addExpense, _addProperty, _addDocument, removeFromTrash, logActivity]);
 
-  // ========== EXPORT + WEEKLY AUTO-BACKUP ==========
+  // ========== EXPORT ==========
   const buildExportPayload = useCallback(() => ({
     exportedAt: new Date().toISOString(), exportedBy: currentUser || 'unknown',
     properties: _allProperties, rentPayments: _allRent, expenses: _allExpenses,
-    transactions: _allTxns, documentsIndex: _allDocuments.map(({ fileData, ...meta }) => meta),
+    documentsIndex: _allDocuments.map(({ fileData, ...meta }) => meta),
     investors, sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas, commsLog, commsSettings,
-  }), [currentUser, _allProperties, _allRent, _allExpenses, _allTxns, _allDocuments, investors, _allTasks, _allLists, sharedIdeas, commsLog, commsSettings]);
+  }), [currentUser, _allProperties, _allRent, _allExpenses, _allDocuments, investors, _allTasks, _allLists, sharedIdeas, commsLog, commsSettings]);
 
   const exportAllData = useCallback(() => {
     const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: 'application/json' });
@@ -397,31 +401,8 @@ export default function RainbowRentals() {
     showToast('Export downloaded', 'success');
   }, [buildExportPayload, logActivity, showToast]);
 
-  // Weekly snapshot into rentalData/backup-YYYY-MM-DD (keeps last 8) — runs on app
-  // open when the last backup is >6.5 days old. Client-side so no extra infra.
-  useEffect(() => {
-    if (!user || dataLoading || !canManage) return;
-    (async () => {
-      try {
-        const metaSnap = await getDoc(doc(db, 'rentalData', 'backupMeta'));
-        const meta = metaSnap.exists() ? metaSnap.data() : {};
-        if (meta.lastAt && (Date.now() - new Date(meta.lastAt).getTime()) < 6.5 * 86400000) return;
-        const dateStr = new Date().toISOString().slice(0, 10);
-        await setDoc(doc(db, 'rentalData', `backup-${dateStr}`), {
-          json: JSON.stringify(buildExportPayload()), at: new Date().toISOString(), by: currentUser || 'auto',
-        });
-        const dates = [...new Set([...(meta.dates || []), dateStr])].sort();
-        for (const d of dates.slice(0, Math.max(0, dates.length - 8))) {
-          try { await deleteDoc(doc(db, 'rentalData', `backup-${d}`)); } catch { /* ignore */ }
-        }
-        await setDoc(doc(db, 'rentalData', 'backupMeta'), { lastAt: new Date().toISOString(), dates: dates.slice(-8) });
-        console.log('[backup] weekly snapshot written:', dateStr);
-      } catch (e) { console.error('backup:', e); }
-    })();
-  }, [user, dataLoading, canManage]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Property financial breakdown modal
-  const [showPropertyBreakdown, setShowPropertyBreakdown] = useState(false);
+  // Weekly Firestore snapshot (rentalData/backup-YYYY-MM-DD, keeps 8) is written by the
+  // daily cron in api/cron/reminders.js — nothing to do client-side.
 
   // Document viewer
   const [viewingDocument, setViewingDocument] = useState(null);
@@ -430,12 +411,18 @@ export default function RainbowRentals() {
   const [showChecklistInitModal, setShowChecklistInitModal] = useState(null);
   const [showChecklistDetailModal, setShowChecklistDetailModal] = useState(null);
 
-  // Deep-link: ?section=analysis (from push notifications) → Properties → 📊 overview.
+  // Deep-link: ?section=<id> (push notifications, help links). Aliases: analysis → Properties
+  // overview, rentday → Home.
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('section') === 'analysis') { setActiveSection('rentals'); setPropertyViewMode('overview'); window.history.replaceState({}, '', window.location.pathname); }
-      if (p.get('section') === 'rentday') { setActiveSection('action-items'); window.history.replaceState({}, '', window.location.pathname); }
+      const sec = p.get('section');
+      if (!sec) return;
+      if (sec === 'analysis') goTo('rentals', { propertyView: 'overview' });
+      else if (sec === 'rentday') goTo('action-items');
+      else if (['pnl', 'grid', 'ledger'].includes(sec)) goTo('money', { moneyView: sec });
+      else goTo(sec);
+      window.history.replaceState({}, '', window.location.pathname);
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -535,22 +522,6 @@ export default function RainbowRentals() {
 
   useEffect(() => { saveDocumentsRef.current = saveDocumentsToFirestore; }, [saveDocumentsToFirestore]);
 
-  const saveFinancialsToFirestore = useCallback(async (newTransactions) => {
-    if (!user) return;
-    try {
-      await setDoc(doc(db, 'rentalData', 'financials'), JSON.parse(JSON.stringify({
-        transactions: newTransactions,
-        lastUpdated: new Date().toISOString(),
-        updatedBy: currentUser || 'unknown'
-      })), { merge: true });
-    } catch (error) {
-      console.error('Error saving financials:', error);
-      showToast('Failed to save financial data.', 'error');
-    }
-  }, [user, currentUser, showToast]);
-
-  useEffect(() => { saveFinancialsRef.current = saveFinancialsToFirestore; }, [saveFinancialsToFirestore]);
-
   const saveRentToFirestore = useCallback(async (newRentPayments) => {
     if (!user) return;
     try {
@@ -634,18 +605,6 @@ export default function RainbowRentals() {
       (error) => console.error('Error loading documents:', error)
     );
 
-    // Subscribe to financials
-    const financialsUnsubscribe = onSnapshot(
-      doc(db, 'rentalData', 'financials'),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.transactions) setTransactions(data.transactions);
-        }
-      },
-      (error) => console.error('Error loading financials:', error)
-    );
-
     // Subscribe to rent payments
     const rentUnsubscribe = onSnapshot(
       doc(db, 'rentalData', 'rent'),
@@ -700,7 +659,6 @@ export default function RainbowRentals() {
       hubUnsubscribe();
       propertiesUnsubscribe();
       documentsUnsubscribe();
-      financialsUnsubscribe();
       rentUnsubscribe();
       expensesUnsubscribe();
       ownershipUnsubscribe();
@@ -911,18 +869,6 @@ export default function RainbowRentals() {
     }
   };
 
-  // ========== PROMOTE IDEA TO TASK ==========
-  const promoteIdeaToTask = (idea) => {
-    setShowAddIdeaModal(null);
-    setShowAddTaskModal({
-      title: idea.title,
-      description: idea.description || '',
-      linkedTo: { section: 'idea', itemId: idea.id },
-      _prefill: true,
-    });
-    updateIdea(idea.id, { status: 'planned' });
-  };
-
   // ========== SEARCH ==========
   const getSearchResults = () => {
     if (!searchQuery.trim()) return [];
@@ -936,7 +882,7 @@ export default function RainbowRentals() {
     documents.filter(d => d.title?.toLowerCase().includes(q) || d.notes?.toLowerCase().includes(q))
       .forEach(d => results.push({ type: 'document', item: d, section: 'documents' }));
     rentPayments.filter(r => (r.tenantName || '').toLowerCase().includes(q) || (r.propertyName || '').toLowerCase().includes(q) || (r.month || '').includes(q))
-      .forEach(r => results.push({ type: 'rent', item: r, section: 'rent' }));
+      .forEach(r => results.push({ type: 'rent', item: r, section: 'money' }));
     expenses.filter(e => (e.description || '').toLowerCase().includes(q) || (e.vendor || '').toLowerCase().includes(q) || (e.propertyName || '').toLowerCase().includes(q))
       .forEach(e => results.push({ type: 'expense', item: e, section: 'expenses' }));
 
@@ -983,32 +929,11 @@ export default function RainbowRentals() {
 
   // Check if any modal is open (to hide nav)
   const anyModalOpen = showAddTaskModal || showSharedListModal || showAddIdeaModal ||
-    showNewPropertyModal || showTenantModal || showAddDocumentModal || showAddTransactionModal ||
+    showNewPropertyModal || showTenantModal || showAddDocumentModal ||
     showAddRentModal || showAddExpenseModal || viewingDocument || selectedProperty ||
     showChecklistInitModal || showChecklistDetailModal || showInvestorModal || showReminder;
 
-  // Mobile section dropdown
-  const allSections = [
-    { id: 'action-items', label: 'Action Items', emoji: '✅' },
-    { id: 'rentals', label: 'Properties', emoji: '🏠' },
-    { id: 'tenants', label: 'Tenants', emoji: '👤' },
-    { id: 'rent', label: 'Income', emoji: '💰' },
-    { id: 'expenses', label: 'Expenses', emoji: '💸' },
-    { id: 'reconcile', label: 'Reconcile', emoji: '⚖️' },
-    { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
-    { id: 'ownership', label: 'Ownership', emoji: '🤝' },
-    { id: 'documents', label: 'Documents', emoji: '📄' },
-  ];
-  const activeSectionInfo = allSections.find(s => s.id === activeSection) || allSections[0];
-
-  // Filter tasks for Hub dashboard
-  const pendingTasks = sharedTasks.filter(t => t.status !== 'done');
-  const todayTasks = pendingTasks.filter(isTaskDueToday);
-  const overdueTasks = pendingTasks.filter(t => {
-    if (!t.dueDate) return false;
-    const today = todayLocalStr();
-    return t.dueDate < today;
-  });
+  const activeSectionInfo = SECTIONS.find(sec => sec.id === activeSection) || SECTIONS[0];
 
   // Filter properties by status - use propertyStatus if set, otherwise derive from tenant
   const getEffectiveStatus = (p) => p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant');
@@ -1017,21 +942,6 @@ export default function RainbowRentals() {
   const renovationProperties = properties.filter(p => getEffectiveStatus(p) === 'renovation');
   const notCollectingRent = properties.filter(p => ['vacant', 'renovation'].includes(getEffectiveStatus(p)));
   const activeProperties = properties.filter(p => ['occupied', 'owner-occupied'].includes(getEffectiveStatus(p)));
-  const leaseExpiredProperties = properties.filter(p => getEffectiveStatus(p) === 'lease-expired');
-
-  // Properties with expiring leases (within 60 days, not already expired)
-  const expiringLeases = properties.filter(p => {
-    const tenants = getPropertyTenants(p);
-    if (tenants.length === 0) return false;
-    // Check if any tenant has a lease ending within 60 days
-    return tenants.some(t => {
-      if (!t.leaseEnd) return false;
-      const end = new Date(t.leaseEnd + 'T00:00:00');
-      const today = new Date(); today.setHours(0,0,0,0);
-      const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-      return days > 0 && days <= 60;
-    });
-  });
 
   return (
     <SharedHubProvider value={sharedHub}>
@@ -1059,15 +969,10 @@ export default function RainbowRentals() {
                     <div className="fixed inset-0 z-40" onClick={() => setShowMobileSectionDropdown(false)} />
                     <div className="absolute top-full left-0 mt-2 z-50 bg-slate-800/95 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl min-w-[180px] py-1"
                       style={{ animation: 'dropdownIn 0.15s ease-out both' }}>
-                      {allSections.map(section => (
+                      {SECTIONS.map(section => (
                         <button
                           key={section.id}
-                          onClick={() => {
-                            setActiveSection(section.id);
-                            if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
-                            setShowMobileSectionDropdown(false);
-                            setShowAddNewMenu(false);
-                          }}
+                          onClick={() => goTo(section.id)}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition ${
                             activeSection === section.id ? 'bg-white/10 text-white font-semibold' : 'text-white/70 hover:bg-white/5 hover:text-white'
                           }`}
@@ -1090,24 +995,10 @@ export default function RainbowRentals() {
               </div>
               {/* Desktop nav tabs */}
               <nav className="hidden md:flex items-center gap-1 ml-6">
-                {[
-                  { id: 'action-items', label: 'Action Items', emoji: '✅' },
-                  { id: 'rentals', label: 'Properties', emoji: '🏠' },
-                  { id: 'tenants', label: 'Tenants', emoji: '👤' },
-                  { id: 'rent', label: 'Income', emoji: '💰' },
-                  { id: 'expenses', label: 'Expenses', emoji: '💸' },
-                  { id: 'reconcile', label: 'Reconcile', emoji: '⚖️' },
-                  { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
-                  { id: 'ownership', label: 'Ownership', emoji: '🤝' },
-                  { id: 'documents', label: 'Documents', emoji: '📄' },
-                ].map(tab => (
+                {SECTIONS.map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => {
-                      setActiveSection(tab.id);
-                      if (tab.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
-                      setShowAddNewMenu(false);
-                    }}
+                    onClick={() => goTo(tab.id)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
                       activeSection === tab.id
                         ? 'bg-white/15 text-white'
@@ -1148,8 +1039,7 @@ export default function RainbowRentals() {
                 <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
                   {getSearchResults().map((result, i) => (
                     <button key={i} onClick={() => {
-                      setActiveSection(result.section);
-                      setShowSearch(false);
+                      goTo(result.section, result.type === 'rent' ? { moneyView: 'ledger' } : {});
                       setSearchQuery('');
                       if (result.type === 'property') setSelectedProperty(result.item);
                       if (result.type === 'document') setViewingDocument(result.item);
@@ -1178,8 +1068,19 @@ export default function RainbowRentals() {
             </div>
           ) : (
             <>
-              {/* ========== DASHBOARD SECTION ========== */}
-              {activeSection === 'reconcile' && (
+              {/* ========== MONEY SECTION: P&L / rent grid / ledger ========== */}
+              {activeSection === 'money' && (
+                <div className="flex gap-1.5 mb-4 items-center sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
+                  {MONEY_VIEWS.map(v => (
+                    <button key={v.id} onClick={() => setMoneyView(v.id)}
+                      className={`flex-1 md:flex-none px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition ${
+                        moneyView === v.id ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                      }`}><span className="mr-1">{v.emoji}</span>{v.label}</button>
+                  ))}
+                </div>
+              )}
+
+              {activeSection === 'money' && moneyView === 'grid' && (
                 <RentReconciliation
                   properties={properties}
                   rentPayments={rentPayments}
@@ -1200,9 +1101,9 @@ export default function RainbowRentals() {
                 />
               )}
 
-              {activeSection === 'dashboard' && (
+              {activeSection === 'money' && moneyView === 'pnl' && (
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-4">Dashboard</h2>
+                  <h2 className="text-xl font-bold text-white mb-4">Profit & Loss</h2>
 
                   {/* Monthly Report Table */}
                   {(() => {
@@ -1607,13 +1508,13 @@ export default function RainbowRentals() {
                   }}
                   onViewProperty={(propertyId) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
-                    if (prop) { setActiveSection('rentals'); setSelectedProperty(prop); }
+                    if (prop) { goTo('rentals'); setSelectedProperty(prop); }
                   }}
                 />
               )}
 
-              {/* ========== RENT SECTION ========== */}
-              {activeSection === 'rent' && (
+              {/* ---- Money: ledger ---- */}
+              {activeSection === 'money' && moneyView === 'ledger' && (
                 <RentLedger
                   rentPayments={rentPayments}
                   properties={properties}
@@ -1698,114 +1599,6 @@ export default function RainbowRentals() {
                     />
                   </div>
 
-                  {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
-                  {canManage && (
-                    <CardInbox
-                      items={(cardInbox?.items || []).filter((it) => !handledInboxIds.includes(it.txnId))}
-                      properties={properties}
-                      onConfirm={confirmCardCharge}
-                      onDismiss={dismissCardCharge}
-                    />
-                  )}
-
-                  {/* ---- Expense review queue from Mike's Money bank data (managers only) ---- */}
-                  {canManage && (() => {
-                    const pending = expenseReviewItems.filter(i => i.status === 'pending');
-                    if (pending.length === 0) return null;
-                    return (
-                      <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                          💳 Expenses to Review ({pending.length}) <span className="normal-case font-normal text-white/30">— from Mike's Money bank data</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {pending.map(item => (
-                            <ExpenseReviewCard
-                              key={item.id}
-                              item={item}
-                              properties={properties}
-                              onApprove={(patch) => {
-                                const prop = properties.find(p => String(p.id) === String(patch.propertyId));
-                                addExpense({
-                                  id: `rev-${item.id}`,
-                                  propertyId: patch.propertyId || '',
-                                  propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
-                                  category: patch.category,
-                                  description: item.description,
-                                  amount: item.amount,
-                                  date: item.date,
-                                  source: 'mikes-money-review',
-                                });
-                                resolveReviewItem(item.id, { status: 'approved', propertyId: patch.propertyId, category: patch.category });
-                              }}
-                              onDismiss={() => resolveReviewItem(item.id, { status: 'dismissed' })}
-                            />
-                          ))}
-                        </div>
-                        <p className="text-[11px] text-white/30 mt-2">
-                          Approve = recorded as a rental expense (Expenses + Schedule E). Dismiss = not a rental expense.
-                        </p>
-                      </div>
-                    );
-                  })()}
-
-                  {/* ---- This week digest + export (managers only) ---- */}
-                  {canManage && (() => {
-                    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-                    const recent = activityEvents.filter(e => e.at >= weekAgo);
-                    const rentsThisWeek = rentPayments.filter(r => (r.datePaid || '') >= weekAgo.slice(0, 10) && ['paid', 'partial', 'late'].includes(r.status));
-                    const rentTotal = rentsThisWeek.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-                    const expThisWeek = expenses.filter(e => (e.createdAt || '') >= weekAgo);
-                    const expTotal = expThisWeek.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-                    return (
-                      <div className="mb-6 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
-                        <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">🗓️ This Week</h3>
-                          <button onClick={exportAllData} className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold" title="Download a full JSON export of all data (auto-backup also runs weekly)">⬇ Export data</button>
-                        </div>
-                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-white/70 mb-2">
-                          <span>💰 {rentsThisWeek.length} rent{rentsThisWeek.length === 1 ? '' : 's'} received · <span className="text-emerald-400 font-semibold">{formatCurrency(rentTotal)}</span></span>
-                          <span>💸 {expThisWeek.length} expense{expThisWeek.length === 1 ? '' : 's'} added · <span className="text-red-400 font-semibold">{formatCurrency(expTotal)}</span></span>
-                          <span>📝 {recent.length} change{recent.length === 1 ? '' : 's'} logged</span>
-                        </div>
-                        {recent.length > 0 && (
-                          <div className="space-y-1">
-                            {recent.slice(0, 8).map((e, i) => (
-                              <div key={i} className="text-xs text-white/40 flex items-baseline gap-2">
-                                <span className="text-white/60 font-medium shrink-0 w-12">{e.by}</span>
-                                <span className="shrink-0">{e.action}</span>
-                                <span className="truncate">{e.detail}</span>
-                                <span className="ml-auto shrink-0">{new Date(e.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                              </div>
-                            ))}
-                            {recent.length > 8 && <div className="text-[11px] text-white/25">…and {recent.length - 8} more</div>}
-                          </div>
-                        )}
-                        {recent.length === 0 && <p className="text-xs text-white/30">Change history starts now — your edits will appear here.</p>}
-                      </div>
-                    );
-                  })()}
-
-                  {/* ---- Recently deleted / restore (managers only) ---- */}
-                  {canManage && trashItems.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">🗑️ Recently Deleted ({trashItems.length})</h3>
-                      <div className="space-y-2">
-                        {trashItems.slice(0, 6).map(item => (
-                          <div key={item.trashId} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.03] border border-white/10">
-                            <div className="min-w-0 flex-1 pr-3">
-                              <span className="text-sm text-white/70">{item.type}: {item.payload?.name || item.payload?.description || item.payload?.propertyName || item.trashId}</span>
-                              <span className="block text-[11px] text-white/30">deleted by {item.deletedBy} · {new Date(item.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{item.payload?.amount ? ` · ${formatCurrency(parseFloat(item.payload.amount) || 0)}` : ''}</span>
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                              <button onClick={() => restoreTrashItem(item)} className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25">↩ Restore</button>
-                              <button onClick={() => removeFromTrash(item.trashId)} className="px-2.5 py-1.5 rounded-xl bg-white/5 text-white/40 text-xs hover:bg-white/10" title="Remove from trash permanently">✕</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Lease Alerts — fixed-term leases expired, or any lease ending within 30 days.
                       Leases past their end date are month-to-month unless marked fixed-term. */}
                   {(() => {
@@ -1840,6 +1633,74 @@ export default function RainbowRentals() {
                       </div>
                     );
                   })()}
+
+                  {/* To-Do List */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">To-Do List</h3>
+                      <button onClick={() => setShowAddTaskModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ Add Task</button>
+                    </div>
+
+                    {/* Task filters + sort */}
+                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {timeHorizons.map(h => (
+                          <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                              hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
+                            }`}>{h.label}</button>
+                        ))}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => setHubTaskSort('priority')}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+                            hubTaskSort === 'priority' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                          }`}>Priority</button>
+                        <button onClick={() => setHubTaskSort('date')}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+                            hubTaskSort === 'date' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                          }`}>Due Date</button>
+                      </div>
+                    </div>
+
+                    {/* Task list */}
+                    <div className="space-y-2">
+                      {sharedTasks
+                        .filter(t => t.status !== 'done')
+                        .filter(t => taskMatchesHorizon(t, hubTaskFilter))
+                        .sort((a, b) => {
+                          if (hubTaskSort === 'date') {
+                            const da = a.dueDate || '9999';
+                            const db = b.dueDate || '9999';
+                            if (da !== db) return da.localeCompare(db);
+                            const pOrder = { high: 0, medium: 1, low: 2 };
+                            return (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
+                          } else {
+                            const pOrder = { high: 0, medium: 1, low: 2 };
+                            const pa = pOrder[a.priority] ?? 2;
+                            const pb = pOrder[b.priority] ?? 2;
+                            if (pa !== pb) return pa - pb;
+                            return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+                          }
+                        })
+                        .map(task => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            onComplete={() => completeTask(task.id)}
+                            onEdit={() => setShowAddTaskModal(task)}
+                            onDelete={() => deleteTask(task.id)}
+                            onHighlight={() => highlightTask(task.id)}
+                            showToast={showToast}
+                            currentUser={currentUser}
+                            getLinkedLabel={(linked) => linked?.propertyId ? getPropertyName(linked.propertyId) : null}
+                          />
+                        ))}
+                      {sharedTasks.filter(t => t.status !== 'done').filter(t => taskMatchesHorizon(t, hubTaskFilter)).length === 0 && (
+                        <p className="text-center text-white/30 py-8">No tasks match this filter</p>
+                      )}
+                    </div>
+                  </div>
 
                   {/* Active Move-In/Move-Out Checklists */}
                   {(() => {
@@ -1909,73 +1770,123 @@ export default function RainbowRentals() {
                     );
                   })()}
 
-                  {/* To-Do List */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">To-Do List</h3>
-                      <button onClick={() => setShowAddTaskModal('create')} className="text-xs text-teal-400 hover:text-teal-300 font-medium">+ Add Task</button>
-                    </div>
+                  {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
+                  {canManage && (
+                    <CardInbox
+                      items={(cardInbox?.items || []).filter((it) => !handledInboxIds.includes(it.txnId))}
+                      properties={properties}
+                      onConfirm={confirmCardCharge}
+                      onDismiss={dismissCardCharge}
+                    />
+                  )}
 
-                    {/* Task filters + sort */}
-                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                      <div className="flex gap-1.5 flex-wrap">
-                        {timeHorizons.map(h => (
-                          <button key={h.value} onClick={() => setHubTaskFilter(h.value)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                              hubTaskFilter === h.value ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
-                            }`}>{h.label}</button>
-                        ))}
+                  {/* ---- Expense review queue from Mike's Money bank data (managers only) ---- */}
+                  {canManage && (() => {
+                    const pending = expenseReviewItems.filter(i => i.status === 'pending');
+                    if (pending.length === 0) return null;
+                    return (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
+                          💳 Expenses to Review ({pending.length}) <span className="normal-case font-normal text-white/30">— from Mike's Money bank data</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {pending.map(item => (
+                            <ExpenseReviewCard
+                              key={item.id}
+                              item={item}
+                              properties={properties}
+                              onApprove={(patch) => {
+                                const prop = properties.find(p => String(p.id) === String(patch.propertyId));
+                                addExpense({
+                                  id: `rev-${item.id}`,
+                                  propertyId: patch.propertyId || '',
+                                  propertyName: prop ? `${prop.emoji || '🏠'} ${prop.name}` : '',
+                                  category: patch.category,
+                                  description: item.description,
+                                  amount: item.amount,
+                                  date: item.date,
+                                  source: 'mikes-money-review',
+                                });
+                                resolveReviewItem(item.id, { status: 'approved', propertyId: patch.propertyId, category: patch.category });
+                              }}
+                              onDismiss={() => resolveReviewItem(item.id, { status: 'dismissed' })}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-white/30 mt-2">
+                          Approve = recorded as a rental expense (Expenses + Schedule E). Dismiss = not a rental expense.
+                        </p>
                       </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => setHubTaskSort('priority')}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
-                            hubTaskSort === 'priority' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
-                          }`}>Priority</button>
-                        <button onClick={() => setHubTaskSort('date')}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
-                            hubTaskSort === 'date' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
-                          }`}>Due Date</button>
-                      </div>
-                    </div>
+                    );
+                  })()}
 
-                    {/* Task list */}
-                    <div className="space-y-2">
-                      {sharedTasks
-                        .filter(t => t.status !== 'done')
-                        .filter(t => taskMatchesHorizon(t, hubTaskFilter))
-                        .sort((a, b) => {
-                          if (hubTaskSort === 'date') {
-                            const da = a.dueDate || '9999';
-                            const db = b.dueDate || '9999';
-                            if (da !== db) return da.localeCompare(db);
-                            const pOrder = { high: 0, medium: 1, low: 2 };
-                            return (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
-                          } else {
-                            const pOrder = { high: 0, medium: 1, low: 2 };
-                            const pa = pOrder[a.priority] ?? 2;
-                            const pb = pOrder[b.priority] ?? 2;
-                            if (pa !== pb) return pa - pb;
-                            return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
-                          }
-                        })
-                        .map(task => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            onComplete={() => completeTask(task.id)}
-                            onEdit={() => setShowAddTaskModal(task)}
-                            onDelete={() => deleteTask(task.id)}
-                            onHighlight={() => highlightTask(task.id)}
-                            showToast={showToast}
-                            currentUser={currentUser}
-                            getLinkedLabel={(linked) => linked?.propertyId ? getPropertyName(linked.propertyId) : null}
-                          />
-                        ))}
-                      {sharedTasks.filter(t => t.status !== 'done').filter(t => taskMatchesHorizon(t, hubTaskFilter)).length === 0 && (
-                        <p className="text-center text-white/30 py-8">No tasks match this filter</p>
+                  {/* ---- Less-used: this week's changes, export, recently deleted ---- */}
+                  {canManage && (
+                    <details className="mb-6">
+                      <summary className="cursor-pointer select-none text-sm font-semibold text-white/40 uppercase tracking-wide hover:text-white/60">More — this week, export, recently deleted</summary>
+                      <div className="mt-3">
+                      {/* ---- This week digest + export (managers only) ---- */}
+                      {canManage && (() => {
+                        const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+                        const recent = activityEvents.filter(e => e.at >= weekAgo);
+                        const rentsThisWeek = rentPayments.filter(r => (r.datePaid || '') >= weekAgo.slice(0, 10) && ['paid', 'partial', 'late'].includes(r.status));
+                        const rentTotal = rentsThisWeek.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+                        const expThisWeek = expenses.filter(e => (e.createdAt || '') >= weekAgo);
+                        const expTotal = expThisWeek.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+                        return (
+                          <div className="mb-6 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                              <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">🗓️ This Week</h3>
+                              <button onClick={exportAllData} className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold" title="Download a full JSON export of all data (a snapshot is also saved to Firestore weekly)">⬇ Export data</button>
+                            </div>
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-white/70 mb-2">
+                              <span>💰 {rentsThisWeek.length} rent{rentsThisWeek.length === 1 ? '' : 's'} received · <span className="text-emerald-400 font-semibold">{formatCurrency(rentTotal)}</span></span>
+                              <span>💸 {expThisWeek.length} expense{expThisWeek.length === 1 ? '' : 's'} added · <span className="text-red-400 font-semibold">{formatCurrency(expTotal)}</span></span>
+                              <span>📝 {recent.length} change{recent.length === 1 ? '' : 's'} logged</span>
+                            </div>
+                            {recent.length > 0 && (
+                              <div className="space-y-1">
+                                {recent.slice(0, 8).map((e, i) => (
+                                  <div key={i} className="text-xs text-white/40 flex items-baseline gap-2">
+                                    <span className="text-white/60 font-medium shrink-0 w-12">{e.by}</span>
+                                    <span className="shrink-0">{e.action}</span>
+                                    <span className="truncate">{e.detail}</span>
+                                    <span className="ml-auto shrink-0">{new Date(e.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  </div>
+                                ))}
+                                {recent.length > 8 && <div className="text-[11px] text-white/25">…and {recent.length - 8} more</div>}
+                              </div>
+                            )}
+                            {recent.length === 0 && <p className="text-xs text-white/30">Change history starts now — your edits will appear here.</p>}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ---- Recently deleted / restore (managers only) ---- */}
+                      {canManage && trashItems.length > 0 && (
+                        <div className="mb-6">
+                          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">🗑️ Recently Deleted ({trashItems.length})</h3>
+                          <div className="space-y-2">
+                            {trashItems.slice(0, 6).map(item => (
+                              <div key={item.trashId} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.03] border border-white/10">
+                                <div className="min-w-0 flex-1 pr-3">
+                                  <span className="text-sm text-white/70">{item.type}: {item.payload?.name || item.payload?.description || item.payload?.propertyName || item.trashId}</span>
+                                  <span className="block text-[11px] text-white/30">deleted by {item.deletedBy} · {new Date(item.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{item.payload?.amount ? ` · ${formatCurrency(parseFloat(item.payload.amount) || 0)}` : ''}</span>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <button onClick={() => restoreTrashItem(item)} className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25">↩ Restore</button>
+                                  <button onClick={() => removeFromTrash(item.trashId)} className="px-2.5 py-1.5 rounded-xl bg-white/5 text-white/40 text-xs hover:bg-white/10" title="Remove from trash permanently">✕</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  </div>
+
+                      </div>
+                    </details>
+                  )}
+
                 </div>
               )}
 
@@ -2108,100 +2019,6 @@ export default function RainbowRentals() {
                 </div>
               )}
 
-              {/* ========== FINANCIALS SECTION ========== */}
-              {activeSection === 'financials' && (
-                <div>
-                  {/* Sub-nav */}
-                  <div className="flex gap-1.5 mb-4 items-center justify-start sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
-                    {[
-                      { id: 'transactions', emoji: '💰' },
-                      { id: 'summary', emoji: '📈' },
-                      { id: 'byProperty', emoji: '🏠' },
-                    ].map(tab => (
-                      <button key={tab.id} onClick={() => setFinancialViewMode(tab.id)}
-                        className={`flex-1 md:flex-none px-3 md:px-4 py-2 rounded-xl font-medium transition text-base md:text-lg text-center ${
-                          financialViewMode === tab.id ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                        }`}>{tab.emoji}</button>
-                    ))}
-                  </div>
-
-                  {/* Transactions */}
-                  {financialViewMode === 'transactions' && (
-                    <div>
-                      <div className="flex gap-2 mb-4">
-                        {['all', 'income', 'expense'].map(f => (
-                          <button key={f} onClick={() => setTransactionTypeFilter(f)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize ${
-                              transactionTypeFilter === f ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
-                            }`}>{f}</button>
-                        ))}
-                      </div>
-                      <div className="space-y-2">
-                        {(getFilteredTransactions ? getFilteredTransactions() : transactions)
-                          .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-                          .map(txn => (
-                            <TransactionCard
-                              key={txn.id}
-                              transaction={txn}
-                              propertyName={getPropertyName(txn.propertyId)}
-                              onEdit={() => setShowAddTransactionModal(txn)}
-                              onDelete={() => {
-                                setConfirmDialog({
-                                  title: 'Delete Transaction',
-                                  message: 'Delete this transaction?',
-                                  onConfirm: () => { deleteTransaction(txn.id); setConfirmDialog(null); },
-                                });
-                              }}
-                            />
-                          ))}
-                        {transactions.length === 0 && (
-                          <div className="text-center py-16">
-                            <p className="text-4xl mb-3">💰</p>
-                            <p className="text-white/40">No transactions yet</p>
-                            <button onClick={() => setShowAddTransactionModal('create')} className="mt-3 px-4 py-2 bg-emerald-500 text-white rounded-xl text-sm hover:bg-emerald-600 transition">
-                              Log Your First Transaction
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary */}
-                  {financialViewMode === 'summary' && (
-                    <FinancialSummary
-                      transactions={transactions}
-                      properties={properties}
-                      getTotalIncome={getTotalIncome}
-                      getTotalExpenses={getTotalExpenses}
-                      getProfit={getProfit}
-                      getMonthlyBreakdown={getMonthlyBreakdown}
-                      getPropertyBreakdown={getPropertyBreakdown}
-                    />
-                  )}
-
-                  {/* By Property */}
-                  {financialViewMode === 'byProperty' && (
-                    <div className="space-y-4">
-                      {properties.map(prop => {
-                        const propTxns = transactions.filter(t => String(t.propertyId) === String(prop.id));
-                        const income = propTxns.filter(t => t.type === 'income').reduce((s, t) => s + (t.amount || 0), 0);
-                        const expenses = propTxns.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amount || 0), 0);
-                        return (
-                          <div key={prop.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
-                            <h3 className="font-semibold text-white mb-2">{prop.emoji || '🏠'} {prop.name}</h3>
-                            <div className="grid grid-cols-3 gap-2 text-sm">
-                              <div><span className="text-white/40">Income:</span> <span className="text-emerald-400">{formatCurrency(income)}</span></div>
-                              <div><span className="text-white/40">Expenses:</span> <span className="text-red-400">{formatCurrency(expenses)}</span></div>
-                              <div><span className="text-white/40">Profit:</span> <span className={income - expenses >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(income - expenses)}</span></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </main>
@@ -2391,23 +2208,6 @@ export default function RainbowRentals() {
           />
         )}
 
-        {/* Financial Modals */}
-        {showAddTransactionModal && (
-          <AddTransactionModal
-            transaction={typeof showAddTransactionModal === 'object' ? showAddTransactionModal : null}
-            properties={properties}
-            onSave={(txnData) => {
-              if (typeof showAddTransactionModal === 'object' && showAddTransactionModal.id) {
-                updateTransaction(showAddTransactionModal.id, txnData);
-              } else {
-                addTransaction({ ...txnData, id: Date.now(), createdAt: new Date().toISOString(), createdBy: currentUser });
-              }
-              setShowAddTransactionModal(null);
-            }}
-            onClose={() => setShowAddTransactionModal(null)}
-          />
-        )}
-
         {/* Rent Payment Modal */}
         {showReminder && (
           <ReminderComposer
@@ -2481,21 +2281,6 @@ export default function RainbowRentals() {
           />
         )}
 
-        {/* Property Financial Breakdown Modal */}
-        {showPropertyBreakdown && (
-          <PropertyFinancialBreakdownModal
-            properties={properties}
-            rentPayments={rentPayments}
-            expenses={expenses}
-            onPropertyClick={(prop) => {
-              setShowPropertyBreakdown(false);
-              setActiveSection('rentals');
-              setSelectedProperty(prop);
-            }}
-            onClose={() => setShowPropertyBreakdown(false)}
-          />
-        )}
-
         {/* Checklist Init Modal */}
         {showChecklistInitModal && (
           <ChecklistInitModal
@@ -2558,30 +2343,17 @@ export default function RainbowRentals() {
             <div className="relative mx-auto w-fit max-w-[97vw] bg-slate-900/80 backdrop-blur-xl border border-slate-600/40 rounded-full shadow-2xl" style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
               {/* Tab buttons — all sections, floating dock */}
               <div className="flex items-end justify-around gap-0.5 px-2 pt-1 pb-1 overflow-x-auto">
-                {[
-                  { id: 'action-items', label: 'Actions', emoji: '✅', gradient: 'from-indigo-400 to-purple-500' },
-                  { id: 'rentals', label: 'Props', emoji: '🏠', gradient: 'from-teal-400 to-cyan-500' },
-                  { id: 'tenants', label: 'Tenants', emoji: '👤', gradient: 'from-blue-400 to-indigo-500' },
-                  { id: 'rent', label: 'Income', emoji: '💰', gradient: 'from-emerald-400 to-green-500' },
-                  { id: 'expenses', label: 'Costs', emoji: '💸', gradient: 'from-red-400 to-rose-500' },
-                  { id: 'dashboard', label: 'Home', emoji: '📊', gradient: 'from-purple-500 to-violet-500' },
-                  { id: 'ownership', label: 'Own', emoji: '🤝', gradient: 'from-amber-400 to-yellow-500' },
-                  { id: 'documents', label: 'Docs', emoji: '📄', gradient: 'from-amber-400 to-orange-500' },
-                ].map((section) => (
+                {SECTIONS.filter(sec => sec.dock).map((section) => (
                   <button
                     key={section.id}
-                    onClick={() => {
-                      setActiveSection(section.id);
-                      if (section.id === 'rentals') { setSelectedProperty(null); setPropertyViewMode('grid'); }
-                      setShowAddNewMenu(false);
-                    }}
-                    className="relative flex flex-col items-center justify-center py-2 rounded-xl transition-all active:scale-95 min-w-[48px]"
+                    onClick={() => goTo(section.id)}
+                    className="relative flex flex-col items-center justify-center py-2 rounded-xl transition-all active:scale-95 min-w-[56px]"
                   >
                     <span className={`text-xl mb-0.5 transition-transform ${activeSection === section.id ? 'scale-110' : ''}`}>
                       {section.emoji}
                     </span>
                     <span className={`text-[10px] font-medium transition-colors ${activeSection === section.id ? 'text-white' : 'text-white/40'}`}>
-                      {section.label}
+                      {section.short}
                     </span>
                     {activeSection === section.id && (
                       <div className={`absolute -bottom-0.5 w-5 h-0.5 rounded-full bg-gradient-to-r ${section.gradient}`} />

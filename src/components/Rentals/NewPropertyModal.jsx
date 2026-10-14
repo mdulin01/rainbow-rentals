@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, Loader } from 'lucide-react';
 import { propertyTypes, propertyColors, propertyStatuses } from '../../constants';
+import { isExcludedFromOwnership } from '../../utils';
 
 const NewPropertyModal = ({ property, onSave, onClose }) => {
   const [formData, setFormData] = useState({
@@ -30,6 +31,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
     emoji: '🏠',
     photo: null,
     propertyStatus: '',
+    excludeFromPool: false,
   });
 
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -39,7 +41,7 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
   // Pre-fill if editing
   useEffect(() => {
     if (property && typeof property === 'object' && property.id) {
-      setFormData(property);
+      setFormData({ ...property, excludeFromPool: isExcludedFromOwnership(property) });
       if (property.photo) {
         setPhotoPreview(property.photo);
       }
@@ -224,6 +226,19 @@ const NewPropertyModal = ({ property, onSave, onClose }) => {
                 </select>
               </div>
             </div>
+            <label className="flex items-start gap-3 mt-4 cursor-pointer">
+              <input
+                type="checkbox"
+                name="excludeFromPool"
+                checked={!!formData.excludeFromPool}
+                onChange={(e) => setFormData(prev => ({ ...prev, excludeFromPool: e.target.checked }))}
+                className="mt-1 w-4 h-4 rounded accent-emerald-500"
+              />
+              <span className="text-sm text-slate-300">
+                Exclude from ownership pool
+                <span className="block text-xs text-slate-500">Leave off for rentals investors hold a stake in. Tick for your own home or a separate arrangement.</span>
+              </span>
+            </label>
           </div>
 
           {/* Address */}

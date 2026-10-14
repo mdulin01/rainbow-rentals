@@ -1,8 +1,10 @@
 import js from '@eslint/js';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   js.configs.recommended,
   {
+    files: ['**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -31,20 +33,40 @@ export default [
         prompt: 'readonly',
         crypto: 'readonly',
         structuredClone: 'readonly',
+        Notification: 'readonly',
+        __BUILD_HASH__: 'readonly',
+        __BUILD_TIME__: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        requestAnimationFrame: 'readonly',
+        Event: 'readonly',
+        CustomEvent: 'readonly',
+        AbortController: 'readonly',
+        atob: 'readonly',
+        btoa: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        URLSearchParams: 'readonly',
+        location: 'readonly',
+        history: 'readonly',
+        performance: 'readonly',
       },
     },
+    plugins: { 'react-hooks': reactHooks },
     rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_|^React$' }],
       'no-undef': 'error',
     },
   },
   {
-    ignores: ['dist/', 'node_modules/'],
+    ignores: ['dist/', 'dist2/', 'dist3/', 'node_modules/', 'public/'],
   },
   {
-    files: ['api/**/*.js'],
+    files: ['api/**/*.js', 'tests/**/*.js', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js', 'scripts/**/*.{js,mjs}'],
     languageOptions: {
-      globals: { process: 'readonly', Buffer: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', console: 'readonly' },
+      globals: { process: 'readonly', Buffer: 'readonly', __dirname: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', console: 'readonly' },
     },
   },
 ];

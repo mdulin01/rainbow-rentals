@@ -79,3 +79,32 @@ export async function pushManagers({ title, body, url = '/?section=rentday' }) {
     return res.successCount;
   } catch (e) { console.error('push failed', e); return 0; }
 }
+
+/**
+ * Weekly snapshot of every rentalData document into rentalData/backup-YYYY-MM-DD
+ * (keeps the newest 8; rentalData/backupMeta tracks them). Called from the daily cron;
+ * no-ops unless the last snapshot is more than 6.5 days old. Returns the date written or null.
+ */
+export async function weeklyBackup({ force = false } = {}) {
+  const d = db();
+  const metaRef = d.doc('rentalData/backupMeta');
+  const meta = (await metaRef.get()).data() || {};
+  if (!force && meta.lastAt && Date.now() - new Date(meta.lastAt).getTime() < 6.5 * 86400000) return null;
+  const snap = await d.collection('rentalData').get();
+  const data = {};
+  for (const docSnap of snap.docs) {
+    if (docSnap.id.startsWith('backup')) continue; // never nest backups
+    const v = docSnap.data();
+    // documents can carry big base64 files — keep only the index
+    data[docSnap.id] = docSnap.id === 'documents' && Array.isArray(v.documents)
+      ? { ...v, documents: v.documents.map(({ fileData, ...rest }) => rest) } : v;
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  await d.doc(`rentalData/backup-${dateStr}`).set({ json: JSON.stringify(data), at: new Date().toISOString(), by: 'cron' });
+  const dates = [...new Set([...(meta.dates || []), dateStr])].sort();
+  for (const old of dates.slice(0, Math.max(0, dates.length - 8))) {
+    try { await d.doc(`rentalData/backup-${old}`).delete(); } catch { /* ignore */ }
+  }
+  await metaRef.set({ lastAt: new Date().toISOString(), dates: dates.slice(-8) });
+  return dateStr;
+}

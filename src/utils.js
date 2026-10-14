@@ -24,13 +24,15 @@ export const formatDate = (dateStr) => {
 };
 
 export const formatCurrency = (amount) => {
-  if (amount === null || amount === undefined) return '$0';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+  const num = parseFloat(amount);
+  if (!Number.isFinite(num)) return '$0';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
 };
 
 export const formatCurrencyDetailed = (amount) => {
-  if (amount === null || amount === undefined) return '$0.00';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const num = parseFloat(amount);
+  if (!Number.isFinite(num)) return '$0.00';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
 };
 
 export const validateFileSize = (file) => {
@@ -181,4 +183,15 @@ export const timeAgo = (iso) => {
   if (d < 14) return `${d}d ago`;
   if (d < 60) return `${Math.floor(d / 7)}w ago`;
   return `${Math.floor(d / 30)}mo ago`;
+};
+
+// Properties left out of the pooled ownership/equity calc: the "Exclude from ownership pool"
+// checkbox on the property. Name fallback keeps N. Church (Mike's residence) and Brookhurst
+// (Adam's home) excluded on records that predate the flag.
+const LEGACY_EXCLUDED_NAMES = ['n. church', 'brookhurst'];
+export const isExcludedFromOwnership = (property) => {
+  if (!property) return false;
+  if (property.excludeFromPool != null) return !!property.excludeFromPool;
+  const name = (property.name || '').toLowerCase();
+  return LEGACY_EXCLUDED_NAMES.some((excluded) => name.includes(excluded));
 };

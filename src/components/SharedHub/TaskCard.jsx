@@ -42,7 +42,7 @@ const TaskCard = React.memo(({ task, onNavigateToLinked, getLinkedLabel }) => {
 
   const handleTouchEnd = () => {
     if (swipeX < -80) {
-      onDelete(task.id);
+      deleteTask(task.id);
     }
     setSwipeX(0);
     setSwiping(false);
