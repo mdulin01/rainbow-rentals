@@ -1800,6 +1800,7 @@ export default function RainbowRentals() {
                       onCompose={(target) => setShowReminder(target)}
                       onRecord={(prefill) => setShowAddRentModal(prefill)}
                       onPatchLog={patchComm}
+                      onSendSms={sendSmsViaServer}
                     />
                   </div>
 

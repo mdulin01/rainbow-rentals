@@ -17,11 +17,13 @@ const CHANNEL_ICON = { sms: MessageSquare, email: Mail, call: Phone, note: Stick
  */
 export default function RentDay({
   properties, rentPayments, commsLog = [], settings = {}, currentUser,
-  onSaveSettings, onCompose, onRecord, onPatchLog, canManage,
+  onSaveSettings, onCompose, onRecord, onPatchLog, onSendSms, canManage,
 }) {
   const [monthKey, setMonthKey] = useState(currentMonthKey());
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState(null);
+  const [testTo, setTestTo] = useState('');
+  const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
   const [expanded, setExpanded] = useState({});
   const today = todayLocalStr();
 
@@ -380,6 +382,28 @@ export default function RentDay({
                   <input type="checkbox" checked={settingsDraft.useTwilio} onChange={e => setSettingsDraft(d => ({ ...d, useTwilio: e.target.checked }))} className="w-5 h-5 rounded accent-emerald-500" />
                   <span className="text-sm text-white">Send texts through Twilio <span className="text-white/40">(server number; replies land here)</span></span>
                 </label>
+                {settingsDraft.useTwilio && onSendSms && (
+                  <div className="pl-8">
+                    <label className="text-xs text-white/40 mb-1 block">Send a test text to</label>
+                    <div className="flex gap-2">
+                      <input value={testTo} onChange={e => { setTestTo(e.target.value); setTestState(null); }} placeholder="(704) 641-2157"
+                        className="flex-1 px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-teal-500/50" />
+                      <button disabled={!testTo.trim() || testState === 'sending'}
+                        onClick={async () => {
+                          setTestState('sending');
+                          try {
+                            await onSendSms({ to: testTo, body: `Test from Rainbow Rentals: this is the number rent reminders will come from. Reply YES to confirm replies work. – ${settingsDraft.fromName || currentUser || 'Mike'}`, tenantName: 'Test', template: 'test' });
+                            setTestState('sent');
+                          } catch (e) { setTestState(e.message || 'failed'); }
+                        }}
+                        className="px-3 py-2 bg-teal-500/20 hover:bg-teal-500/30 disabled:opacity-40 text-teal-300 rounded-xl text-xs font-semibold transition">
+                        {testState === 'sending' ? 'Sending…' : 'Send test'}
+                      </button>
+                    </div>
+                    {testState === 'sent' && <p className="text-[11px] text-emerald-300 mt-1">Sent. Delivery status shows under Recent messages in a few seconds; a reply will land under 💬 Replies.</p>}
+                    {testState && testState !== 'sent' && testState !== 'sending' && <p className="text-[11px] text-red-300 mt-1">{testState}</p>}
+                  </div>
+                )}
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={settingsDraft.autoEnabled} disabled={!settingsDraft.useTwilio} onChange={e => setSettingsDraft(d => ({ ...d, autoEnabled: e.target.checked }))} className="w-5 h-5 rounded accent-emerald-500 disabled:opacity-40" />
                   <span className={`text-sm ${settingsDraft.useTwilio ? 'text-white' : 'text-white/40'}`}>Automatic reminders <span className="text-white/40">(daily at 10am ET)</span></span>

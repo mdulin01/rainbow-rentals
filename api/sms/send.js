@@ -32,6 +32,7 @@ export default async function handler(req, res) {
   } catch (e) {
     const status = e.status || (e.code === 21211 ? 400 : 500);
     console.error('sms/send', e);
-    return res.status(status).json({ error: e.message || 'send failed' });
+    const twilioCode = e.code && e.moreInfo ? ` (Twilio ${e.code})` : '';
+    return res.status(status).json({ error: (e.message || 'send failed') + twilioCode });
   }
 }
