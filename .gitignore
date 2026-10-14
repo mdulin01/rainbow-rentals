@@ -5,3 +5,6 @@ dist3
 .DS_Store
 *.local
 vite.config.js.timestamp-*
+.vercel
+.env*
+.codex-private/

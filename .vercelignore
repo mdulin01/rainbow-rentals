@@ -1,0 +1,4 @@
+.codex-private
+.env*
+.git
+node_modules

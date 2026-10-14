@@ -7,7 +7,7 @@ import { triageInbound } from '../_lib/triage.js';
 import { findTenantByPhone, computeRentRows } from '../../src/rentLogic.js';
 import { currentMonthKey, todayLocalStr, normalizePhone } from '../../src/utils.js';
 
-const STOP_WORDS = ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit'];
+const STOP_WORDS = ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'revoke', 'optout'];
 const START_WORDS = ['start', 'yes', 'unstop'];
 
 export default async function handler(req, res) {
@@ -30,8 +30,10 @@ export default async function handler(req, res) {
     if (row) row.monthKey = monthKey;
 
     const lower = text.toLowerCase();
-    const isStop = STOP_WORDS.includes(lower);
-    const isStart = START_WORDS.includes(lower);
+    // Advanced Opt-Out reports the action after matching configured keywords.
+    const optOutType = String(params.OptOutType || '').toUpperCase();
+    const isStop = optOutType === 'STOP' || (!optOutType && STOP_WORDS.includes(lower));
+    const isStart = optOutType === 'START' || (!optOutType && START_WORDS.includes(lower));
 
     const entry = {
       id: `in-${Date.now()}`, at: new Date().toISOString(), by: match ? match.tenant.name : from,
