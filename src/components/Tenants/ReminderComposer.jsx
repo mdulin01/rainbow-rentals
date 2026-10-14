@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, MessageSquare, Mail, Copy, Phone, StickyNote } from 'lucide-react';
 import { reminderTemplates } from '../../constants';
-import { formatCurrency, formatDate, monthName, rentDueDateStr, fillTemplate, buildSmsLink, buildMailtoLink, normalizePhone } from '../../utils';
-import { getLeaseTerms } from '../../hooks/useProperties';
+import { buildSmsLink, buildMailtoLink, normalizePhone } from '../../utils';
+import { getLeaseTerms, reminderVars, renderReminder } from '../../rentLogic.js';
 
 /**
  * ReminderComposer — pick a template, tweak the text, then open Messages / Mail with it
@@ -11,35 +11,22 @@ import { getLeaseTerms } from '../../hooks/useProperties';
  *
  * target: { property, tenant, monthKey, templateId, amountDue, balance }
  */
-export default function ReminderComposer({ target, settings = {}, currentUser, onLog, onClose, showToast }) {
+export default function ReminderComposer({ target, settings = {}, currentUser, onLog, onSendSms, onClose, showToast }) {
   const { property, tenant, monthKey } = target;
   const terms = useMemo(() => getLeaseTerms(property, settings), [property, settings]);
   const [templateId, setTemplateId] = useState(target.templateId || 'upcoming');
   const [noteDraft, setNoteDraft] = useState('');
   const [channel, setChannel] = useState(target.channel || 'sms'); // sms | email | call | note
 
-  const vars = useMemo(() => {
-    const first = tenant?.firstName || (tenant?.name || '').trim().split(/\s+/)[0] || 'there';
-    const amountDue = target.amountDue ?? (parseFloat(property?.monthlyRent) || 0);
-    const balance = target.balance ?? amountDue;
-    const dueDate = rentDueDateStr(monthKey, terms.dueDay);
-    const payInstructions = (settings.payInstructions || '').trim();
-    return {
-      first,
-      amount: formatCurrency(amountDue),
-      balance: formatCurrency(balance),
-      property: property?.name || 'the property',
-      month: monthName(monthKey),
-      dueDate: formatDate(dueDate).replace(/, \d{4}$/, ''),
-      lateFeeLine: terms.lateFee > 0 ? `A ${formatCurrency(terms.lateFee)} late fee applies after the ${terms.graceDays}-day grace period. ` : '',
-      payInstructions: payInstructions ? payInstructions + ' ' : '',
-      from: settings.fromName || currentUser || 'Rainbow Rentals',
-    };
-  }, [tenant, property, monthKey, terms, settings, currentUser, target.amountDue, target.balance]);
+  const vars = useMemo(() => reminderVars({
+    property, tenant, monthKey, terms, settings, from: currentUser,
+    amountDue: target.amountDue, balance: target.balance,
+  }), [tenant, property, monthKey, terms, settings, currentUser, target.amountDue, target.balance]);
 
-  const render = (id) => fillTemplate((reminderTemplates.find(x => x.id === id) || reminderTemplates[0]).text, vars);
-  const [text, setText] = useState(() => render(templateId));
-  useEffect(() => { setText(render(templateId)); }, [templateId, vars]); // eslint-disable-line react-hooks/exhaustive-deps
+  const render = (id) => renderReminder(id, vars);
+  const [text, setText] = useState(() => target.text || render(templateId));
+  const [sending, setSending] = useState(false);
+  const pickTemplate = (id) => { setTemplateId(id); setText(render(id)); };
 
   const phone = tenant?.phone || '';
   const email = tenant?.email || '';
@@ -86,6 +73,9 @@ export default function ReminderComposer({ target, settings = {}, currentUser, o
             <p className="text-xs text-white/40 truncate">
               {property?.emoji || '🏠'} {property?.name} · {vars.month} · {vars.amount} due {vars.dueDate}
             </p>
+            {target.replyToText && (
+              <p className="text-xs text-teal-200/80 mt-1 bg-teal-500/10 border border-teal-500/20 rounded-lg px-2 py-1 line-clamp-3">↩︎ “{target.replyToText}”</p>
+            )}
             <p className="text-xs text-white/30 mt-0.5">
               {phone ? `📱 ${phone}` : 'no phone on file'}{email ? ` · ✉️ ${email}` : ''}
               {tenant?.smsOk === false && <span className="text-orange-400 ml-2">texting declined</span>}
@@ -118,7 +108,7 @@ export default function ReminderComposer({ target, settings = {}, currentUser, o
             {/* Template chips */}
             <div className="flex flex-wrap gap-1.5 mb-3">
               {reminderTemplates.map(t => (
-                <button key={t.id} onClick={() => setTemplateId(t.id)}
+                <button key={t.id} onClick={() => pickTemplate(t.id)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs border transition ${
                     templateId === t.id ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300' : 'bg-white/[0.05] border-white/[0.08] text-white/50 hover:bg-white/10'
                   }`}>
@@ -140,11 +130,31 @@ export default function ReminderComposer({ target, settings = {}, currentUser, o
             )}
 
             <div className="flex flex-wrap gap-2 mt-4">
+              {channel === 'sms' && canText && settings.useTwilio && onSendSms && (
+                <button disabled={sending || !text.trim()}
+                  onClick={async () => {
+                    setSending(true);
+                    try {
+                      await onSendSms({
+                        to: phone, body: text, tenantId: tenant?.id, tenantName: tenant?.name,
+                        propertyId: property?.id, propertyName: property?.name, month: monthKey,
+                        template: templateId, replyTo: target.replyTo || null,
+                      });
+                      showToast && showToast('Text sent', 'success');
+                      onClose();
+                    } catch (e) {
+                      showToast && showToast('Send failed — ' + (e.message || 'unknown error'), 'error');
+                    } finally { setSending(false); }
+                  }}
+                  className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition">
+                  <MessageSquare className="w-4 h-4" /> {sending ? 'Sending…' : 'Send text'}
+                </button>
+              )}
               {channel === 'sms' && (
                 canText ? (
                   <a href={buildSmsLink(phone, text)} onClick={() => { log('sms', text); showToast && showToast('Logged — Messages should open', 'success'); setTimeout(onClose, 300); }}
-                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition">
-                    <MessageSquare className="w-4 h-4" /> Open Messages
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${settings.useTwilio && onSendSms ? 'bg-white/10 hover:bg-white/20 text-white' : 'flex-1 min-w-[140px] bg-emerald-500 hover:bg-emerald-600 text-white'}`}>
+                    <MessageSquare className="w-4 h-4" /> {settings.useTwilio && onSendSms ? 'My phone' : 'Open Messages'}
                   </a>
                 ) : (
                   <div className="flex-1 min-w-[140px] px-4 py-2.5 bg-white/5 text-white/40 rounded-xl text-xs text-center">

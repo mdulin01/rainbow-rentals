@@ -303,6 +303,30 @@ export default function RainbowRentals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  const patchComm = useCallback(async (id, patch) => {
+    const next = commsLogRef.current.map(e => e.id === id ? { ...e, ...patch } : e);
+    setCommsLog(next);
+    try {
+      await setDoc(doc(db, 'rentalData', 'comms'), JSON.parse(JSON.stringify({ log: next, lastUpdated: new Date().toISOString() })), { merge: true });
+    } catch (e) { console.error('comms patch:', e); }
+  }, []);
+
+  // Send a text through the server (Twilio). The function logs to rentalData/comms itself;
+  // the onSnapshot above picks it up. Needs the manager's Firebase ID token.
+  const sendSmsViaServer = useCallback(async (payload) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Not signed in');
+    const r = await fetch('/api/sms/send', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    logActivity('sms', `→ ${payload.tenantName || payload.to} (${payload.propertyName || ''})`);
+    return j;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const saveCommsSettings = useCallback(async (settings) => {
     setCommsSettings(settings);
     try {
@@ -1717,6 +1741,7 @@ export default function RainbowRentals() {
                   onSaveSettings={saveCommsSettings}
                   onCompose={(target) => setShowReminder(target)}
                   onRecord={(prefill) => setShowAddRentModal(prefill)}
+                  onPatchLog={patchComm}
                 />
               )}
               {activeSection === 'tenants' && (!canManage || tenantsView === 'list') && (
@@ -2818,6 +2843,7 @@ export default function RainbowRentals() {
             currentUser={currentUser}
             showToast={showToast}
             onLog={(entry) => { logComm(entry); logActivity('reminder', `${entry.channel} → ${entry.tenantName} (${entry.propertyName})`); }}
+            onSendSms={sendSmsViaServer}
             onClose={() => setShowReminder(null)}
           />
         )}

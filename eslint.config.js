@@ -41,4 +41,10 @@ export default [
   {
     ignores: ['dist/', 'node_modules/'],
   },
+  {
+    files: ['api/**/*.js'],
+    languageOptions: {
+      globals: { process: 'readonly', Buffer: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', console: 'readonly' },
+    },
+  },
 ];

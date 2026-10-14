@@ -1,33 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 
-/**
- * Helper: get tenants array from a property, handling legacy single-tenant data.
- * Legacy: property.tenant = { name, email, ... }
- * New:    property.tenants = [{ id, name, email, ... }, ...]
- */
-export const getPropertyTenants = (property) => {
-  if (!property) return [];
-  if (Array.isArray(property.tenants) && property.tenants.length > 0) return property.tenants;
-  if (property.tenant && property.tenant.name) return [{ id: 'legacy', ...property.tenant }];
-  return [];
-};
-
-/**
- * Lease terms for a property: rent due day, grace period, late fee. Stored on the
- * tenant (the lease), so take the first active tenant that has any set; fall back
- * to the app-wide defaults in `defaults` (from rentalData/comms settings).
- */
-export const getLeaseTerms = (property, defaults = {}) => {
-  const tenants = getPropertyTenants(property);
-  const active = tenants.filter(t => !t.status || ['active', 'notice', 'pending'].includes(t.status));
-  const src = [...active, ...tenants].find(t => t.rentDueDay || t.graceDays || t.lateFee) || {};
-  const num = (v, d) => { const n = parseFloat(v); return isNaN(n) ? d : n; };
-  return {
-    dueDay: Math.min(Math.max(parseInt(src.rentDueDay || defaults.dueDay || 1, 10) || 1, 1), 28),
-    graceDays: Math.max(parseInt(src.graceDays ?? defaults.graceDays ?? 5, 10) || 0, 0),
-    lateFee: num(src.lateFee, num(defaults.lateFee, 0)),
-  };
-};
+import { getPropertyTenants, getLeaseTerms } from '../rentLogic.js';
+export { getPropertyTenants, getLeaseTerms };
 
 /**
  * useProperties Hook

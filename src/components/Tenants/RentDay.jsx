@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, MessageSquare, Mail, Settings, Phone, StickyNote, Check } from 'lucide-react';
-import { formatCurrency, formatDate, monthName, currentMonthKey, rentDueDateStr, todayLocalStr, timeAgo, parseLocalDate } from '../../utils';
-import { getPropertyTenants, getLeaseTerms } from '../../hooks/useProperties';
+import { formatCurrency, formatDate, monthName, currentMonthKey, todayLocalStr, timeAgo } from '../../utils';
+import { computeRentRows } from '../../rentLogic.js';
 
 const shiftMonth = (key, delta) => {
   const [y, m] = key.split('-').map(Number);
@@ -17,7 +17,7 @@ const CHANNEL_ICON = { sms: MessageSquare, email: Mail, call: Phone, note: Stick
  */
 export default function RentDay({
   properties, rentPayments, commsLog = [], settings = {}, currentUser,
-  onSaveSettings, onCompose, onRecord, canManage,
+  onSaveSettings, onCompose, onRecord, onPatchLog, canManage,
 }) {
   const [monthKey, setMonthKey] = useState(currentMonthKey());
   const [showSettings, setShowSettings] = useState(false);
@@ -25,38 +25,8 @@ export default function RentDay({
   const [expanded, setExpanded] = useState({});
   const today = todayLocalStr();
 
-  const rows = useMemo(() => {
-    const rentProps = properties.filter(p =>
-      ['occupied', 'lease-expired', 'month-to-month'].includes(
-        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-      ) && (parseFloat(p.monthlyRent) || 0) > 0
-    );
-    return rentProps.map(p => {
-      const terms = getLeaseTerms(p, settings);
-      const due = parseFloat(p.monthlyRent) || 0;
-      const records = rentPayments.filter(r => String(r.propertyId) === String(p.id)
-        && (!r.incomeType || r.incomeType === 'rent')
-        && ['paid', 'partial', 'late'].includes(r.status)
-        && (r.month || r.datePaid || '').startsWith(monthKey));
-      const paid = records.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-      const settled = records.some(r => r.status === 'paid') || paid >= due - 0.005;
-      const status = settled ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
-      const dueDate = rentDueDateStr(monthKey, terms.dueDay);
-      const daysPast = Math.round((parseLocalDate(today) - parseLocalDate(dueDate)) / 86400000);
-      const phase = daysPast < 0 ? 'upcoming' : daysPast === 0 ? 'due' : daysPast <= terms.graceDays ? 'grace' : 'late';
-      const suggested = status === 'paid' ? 'receipt' : status === 'partial' ? 'partial'
-        : phase === 'late' ? 'late' : phase === 'upcoming' ? 'upcoming' : 'due';
-      const tenants = getPropertyTenants(p).filter(t => t.status !== 'vacant');
-      const lastContact = (tenant) => commsLog.find(e =>
-        (tenant.id && String(e.tenantId) === String(tenant.id)) ||
-        (!tenant.id && e.tenantName && e.tenantName === tenant.name));
-      const monthLog = commsLog.filter(e => String(e.propertyId) === String(p.id) && e.month === monthKey);
-      return { property: p, terms, due, paid, balance: Math.max(due - paid, 0), status, dueDate, daysPast, phase, suggested, tenants, records, lastContact, monthLog };
-    }).sort((a, b) => {
-      const rank = { unpaid: 0, partial: 1, paid: 2 };
-      return rank[a.status] - rank[b.status] || b.daysPast - a.daysPast;
-    });
-  }, [properties, rentPayments, commsLog, settings, monthKey, today]);
+  const rows = useMemo(() => computeRentRows({ properties, rentPayments, commsLog, settings, monthKey, today })
+    .map(r => ({ ...r, monthKey })), [properties, rentPayments, commsLog, settings, monthKey, today]);
 
   const totals = useMemo(() => ({
     due: rows.reduce((s, r) => s + r.due, 0),
@@ -66,14 +36,29 @@ export default function RentDay({
   }), [rows]);
 
   const openSettings = () => {
+    const a = settings.auto || {};
     setSettingsDraft({
       payInstructions: settings.payInstructions || '',
       fromName: settings.fromName || currentUser || '',
       dueDay: settings.dueDay || 1,
       graceDays: settings.graceDays ?? 5,
       lateFee: settings.lateFee || '',
+      useTwilio: !!settings.useTwilio,
+      autoEnabled: !!a.enabled,
+      daysBefore: a.daysBefore ?? 3,
+      onDueDay: a.onDueDay !== false,
+      afterGraceDays: a.afterGraceDays ?? 1,
+      repeatEveryDays: a.repeatEveryDays ?? 7,
     });
     setShowSettings(true);
+  };
+
+  const inbound = useMemo(() => commsLog.filter(e => e.direction === 'in'), [commsLog]);
+  const unreadCount = inbound.filter(e => e.unread).length;
+  const findRowForEntry = (e) => rows.find(r => String(r.property.id) === String(e.propertyId));
+  const tenantForEntry = (e) => {
+    const r = findRowForEntry(e);
+    return r?.tenants.find(t => String(t.id) === String(e.tenantId)) || { id: e.tenantId, name: e.tenantName, phone: e.from, firstName: (e.tenantName || '').split(' ')[0] };
   };
 
   const statusStyle = {
@@ -106,6 +91,52 @@ export default function RentDay({
         <button onClick={openSettings} className="w-full text-left mb-4 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-sm text-orange-200 hover:bg-orange-500/15 transition">
           ⚙️ Set your Zelle / payment instructions once and every reminder includes them.
         </button>
+      )}
+
+      {/* Replies from tenants (Twilio inbound) */}
+      {inbound.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-2">
+            💬 Replies{unreadCount > 0 ? ` (${unreadCount} new)` : ''}
+          </h3>
+          <div className="space-y-2">
+            {inbound.slice(0, unreadCount > 0 ? 20 : 3).map(e => {
+              const r = findRowForEntry(e);
+              const t = tenantForEntry(e);
+              const ai = e.ai || null;
+              return (
+                <div key={e.id} className={`rounded-2xl border p-3 ${e.unread ? 'bg-teal-500/10 border-teal-500/25' : 'bg-white/[0.03] border-white/[0.06]'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs text-white/40">{timeAgo(e.at)} · <span className="text-white/80 font-medium">{e.tenantName}</span>{e.propertyName ? ` · ${e.propertyName}` : ''}{e.repliedAt ? ' · replied' : ''}</p>
+                      <p className="text-sm text-white mt-0.5 whitespace-pre-wrap break-words">“{e.text}”</p>
+                      {e.media?.length > 0 && <p className="text-[11px] text-white/40 mt-0.5">📎 {e.media.length} attachment{e.media.length > 1 ? 's' : ''} (open in Twilio console)</p>}
+                      {ai && (
+                        <div className="mt-2 text-xs rounded-xl bg-black/20 px-2.5 py-2">
+                          <p className="text-white/60"><span className="text-teal-300 font-semibold">🦚 {ai.intent}</span>{ai.promisedDate ? ` · promises ${formatDate(ai.promisedDate)}` : ''} — {ai.summary}</p>
+                          {ai.reply && <p className="text-white/50 mt-1 italic">Suggested: “{ai.reply}”</p>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {canManage && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <button onClick={() => onCompose({ property: r?.property || { id: e.propertyId, name: e.propertyName }, tenant: t, monthKey: e.month || monthKey, templateId: 'custom', channel: 'sms', text: ai?.reply || '', replyTo: e.id, replyToText: e.text, amountDue: r?.due, balance: r?.balance })}
+                        className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition">↩︎ Reply</button>
+                      {ai?.intent === 'paid' && r && r.status !== 'paid' && (
+                        <button onClick={() => onRecord({ incomeType: 'rent', propertyId: r.property.id, month: r.monthKey, amount: r.status === 'partial' ? r.balance : r.due, status: 'paid' })}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold transition">Record payment</button>
+                      )}
+                      {e.unread && onPatchLog && (
+                        <button onClick={() => onPatchLog(e.id, { unread: false })} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs transition">Done</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Summary */}
@@ -255,7 +286,7 @@ export default function RentDay({
                 <div key={e.id} className="flex gap-2 text-xs bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2">
                   <Icon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-white/40" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-white/40">{timeAgo(e.at)} · {e.by} → <span className="text-white/70">{e.tenantName}</span> · {e.propertyName}{e.month ? ` · ${monthName(e.month)}` : ''}</p>
+                    <p className="text-white/40">{timeAgo(e.at)} · {e.direction === 'in' ? <span className="text-white/70">{e.tenantName}</span> : <>{e.by}{e.auto ? ' ⏰' : ''} → <span className="text-white/70">{e.tenantName}</span></>} · {e.propertyName}{e.month ? ` · ${monthName(e.month)}` : ''}{e.delivery === 'failed' || e.delivery === 'undelivered' ? <span className="text-red-400"> · {e.delivery}</span> : e.delivery === 'delivered' ? <span className="text-green-400/70"> · ✓</span> : ''}</p>
                     <p className="text-white/60 truncate">{e.text}</p>
                   </div>
                 </div>
@@ -303,6 +334,41 @@ export default function RentDay({
                 </div>
               </div>
               <p className="text-[11px] text-white/30">Per-tenant values (on the tenant form) override these defaults.</p>
+
+              <div className="pt-3 border-t border-white/10 space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={settingsDraft.useTwilio} onChange={e => setSettingsDraft(d => ({ ...d, useTwilio: e.target.checked }))} className="w-5 h-5 rounded accent-emerald-500" />
+                  <span className="text-sm text-white">Send texts through Twilio <span className="text-white/40">(server number; replies land here)</span></span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={settingsDraft.autoEnabled} disabled={!settingsDraft.useTwilio} onChange={e => setSettingsDraft(d => ({ ...d, autoEnabled: e.target.checked }))} className="w-5 h-5 rounded accent-emerald-500 disabled:opacity-40" />
+                  <span className={`text-sm ${settingsDraft.useTwilio ? 'text-white' : 'text-white/40'}`}>Automatic reminders <span className="text-white/40">(daily at 10am ET)</span></span>
+                </label>
+                {settingsDraft.autoEnabled && settingsDraft.useTwilio && (
+                  <div className="grid grid-cols-2 gap-3 pl-8">
+                    <div>
+                      <label className="text-xs text-white/40 mb-1 block">Days before due</label>
+                      <input type="number" min="0" max="14" value={settingsDraft.daysBefore} onChange={e => setSettingsDraft(d => ({ ...d, daysBefore: e.target.value }))}
+                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-teal-500/50" />
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer mt-5">
+                      <input type="checkbox" checked={settingsDraft.onDueDay} onChange={e => setSettingsDraft(d => ({ ...d, onDueDay: e.target.checked }))} className="w-4 h-4 rounded accent-emerald-500" />
+                      <span className="text-xs text-white/70">On the due day</span>
+                    </label>
+                    <div>
+                      <label className="text-xs text-white/40 mb-1 block">Days after grace ends</label>
+                      <input type="number" min="0" max="14" value={settingsDraft.afterGraceDays} onChange={e => setSettingsDraft(d => ({ ...d, afterGraceDays: e.target.value }))}
+                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-teal-500/50" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/40 mb-1 block">Then repeat every (days)</label>
+                      <input type="number" min="0" max="30" value={settingsDraft.repeatEveryDays} onChange={e => setSettingsDraft(d => ({ ...d, repeatEveryDays: e.target.value }))}
+                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-teal-500/50" />
+                    </div>
+                    <p className="col-span-2 text-[11px] text-white/30">Only tenants marked “OK to text”. Nothing is sent twice for the same month and step. Paid properties are skipped.</p>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => { onSaveSettings({
@@ -311,6 +377,14 @@ export default function RentDay({
                 dueDay: Math.min(Math.max(parseInt(settingsDraft.dueDay, 10) || 1, 1), 28),
                 graceDays: Math.max(parseInt(settingsDraft.graceDays, 10) || 0, 0),
                 lateFee: parseFloat(settingsDraft.lateFee) || 0,
+                useTwilio: !!settingsDraft.useTwilio,
+                auto: {
+                  enabled: !!settingsDraft.autoEnabled && !!settingsDraft.useTwilio,
+                  daysBefore: Math.max(parseInt(settingsDraft.daysBefore, 10) || 0, 0),
+                  onDueDay: !!settingsDraft.onDueDay,
+                  afterGraceDays: Math.max(parseInt(settingsDraft.afterGraceDays, 10) || 0, 0),
+                  repeatEveryDays: Math.max(parseInt(settingsDraft.repeatEveryDays, 10) || 0, 0),
+                },
               }); setShowSettings(false); }}
                 className="flex-1 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition">Save</button>
               <button onClick={() => setShowSettings(false)} className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm transition">Cancel</button>
