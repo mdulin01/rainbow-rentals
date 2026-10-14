@@ -69,6 +69,7 @@ import FinancialSummary from './components/Financials/FinancialSummary';
 // Hooks
 import { useSharedHub } from './hooks/useSharedHub';
 import { useProperties, getPropertyTenants, getLeaseTerms } from './hooks/useProperties';
+import { leaseAlerts } from './rentLogic.js';
 import { useDocuments } from './hooks/useDocuments';
 import { useFinancials } from './hooks/useFinancials';
 import { useRent } from './hooks/useRent';
@@ -1012,13 +1013,11 @@ export default function RainbowRentals() {
   // Filter properties by status - use propertyStatus if set, otherwise derive from tenant
   const getEffectiveStatus = (p) => p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant');
   // "owner-occupied" counts as occupied/rented for dashboard purposes
-  const isOccupiedStatus = (s) => ['occupied', 'owner-occupied', 'lease-expired', 'month-to-month'].includes(s);
   const vacantProperties = properties.filter(p => getEffectiveStatus(p) === 'vacant');
   const renovationProperties = properties.filter(p => getEffectiveStatus(p) === 'renovation');
   const notCollectingRent = properties.filter(p => ['vacant', 'renovation'].includes(getEffectiveStatus(p)));
   const activeProperties = properties.filter(p => ['occupied', 'owner-occupied'].includes(getEffectiveStatus(p)));
   const leaseExpiredProperties = properties.filter(p => getEffectiveStatus(p) === 'lease-expired');
-  const monthToMonthProperties = properties.filter(p => getEffectiveStatus(p) === 'month-to-month');
 
   // Properties with expiring leases (within 60 days, not already expired)
   const expiringLeases = properties.filter(p => {
@@ -1401,122 +1400,6 @@ export default function RainbowRentals() {
                     );
                   })()}
 
-                  {/* Outstanding rent card — only shows when rent is due */}
-                  {(() => {
-                    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-                    const monthLabel = new Date().toLocaleString('en-US', { month: 'long' });
-                    const rentedPropIds = new Set(
-                      properties
-                        .filter(p => ['occupied', 'lease-expired', 'month-to-month'].includes(getEffectiveStatus(p)))
-                        .map(p => String(p.id))
-                    );
-                    const paidPropIds = new Set(
-                      rentPayments
-                        .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(currentMonth))
-                        .map(r => String(r.propertyId))
-                    );
-                    const unpaidProps = properties.filter(p => rentedPropIds.has(String(p.id)) && !paidPropIds.has(String(p.id)));
-                    const totalDue = unpaidProps.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0);
-
-                    if (unpaidProps.length === 0) return null;
-                    return (
-                      <button onClick={() => setActiveSection('rent')}
-                        className="w-full bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6 text-left hover:bg-red-500/15 transition cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-red-400">Outstanding Rent — {monthLabel}</h3>
-                          <p className="text-xl font-bold text-red-400">{formatCurrency(totalDue)}</p>
-                        </div>
-                        <div className="space-y-1">
-                          {unpaidProps.map(p => (
-                            <div key={p.id} className="flex items-center justify-between text-sm">
-                              <span className="text-white/60">{p.emoji || '🏠'} {p.name}</span>
-                              <span className="text-red-400/70">{formatCurrency(parseFloat(p.monthlyRent) || 0)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </button>
-                    );
-                  })()}
-
-                  {/* Property status alerts */}
-                  {(vacantProperties.length > 0 || leaseExpiredProperties.length > 0 || expiringLeases.length > 0) && (
-                    <div className="space-y-3 mb-6">
-                      {vacantProperties.length > 0 && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-                          <h3 className="text-sm font-semibold text-red-400 mb-2">Vacant Properties</h3>
-                          {vacantProperties.map(p => (
-                            <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
-                              className="block text-sm text-white/70 hover:text-white transition py-1">
-                              {p.emoji || '🏠'} {p.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {leaseExpiredProperties.length > 0 && (
-                        <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
-                          <h3 className="text-sm font-semibold text-orange-400 mb-2">Lease Expired</h3>
-                          {leaseExpiredProperties.map(p => {
-                            const tenants = getPropertyTenants(p);
-                            const earliestEnd = tenants.map(t => t.leaseEnd).filter(Boolean).sort()[0];
-                            const endLabel = earliestEnd ? ` — ${new Date(earliestEnd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : '';
-                            return (
-                              <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
-                                className="block text-sm text-white/70 hover:text-white transition py-1">
-                                {p.emoji || '🏠'} {p.name}<span className="text-orange-400/70">{endLabel}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {expiringLeases.length > 0 && (
-                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4">
-                          <h3 className="text-sm font-semibold text-yellow-400 mb-2">Leases Expiring Soon</h3>
-                          {expiringLeases.map(p => {
-                            const tenants = getPropertyTenants(p);
-                            const soonestEnd = tenants.map(t => t.leaseEnd).filter(Boolean).sort()[0];
-                            const end = soonestEnd ? new Date(soonestEnd + 'T00:00:00') : new Date();
-                            const today = new Date(); today.setHours(0,0,0,0);
-                            const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-                            return (
-                              <button key={p.id} onClick={() => { setActiveSection('rentals'); setSelectedProperty(p); }}
-                                className="block text-sm text-white/70 hover:text-white transition py-1">
-                                {p.emoji || '🏠'} {p.name} <span className="text-yellow-400/70">— {days}d left</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Quick link to Action Items if there are pending tasks or active checklists */}
-                  {(() => {
-                    const activeChecklists = sharedLists.filter(l =>
-                      (l.category === 'move-in' || l.category === 'move-out' || l.category === 'leasing') && l.status !== 'archived'
-                    );
-                    const pendingCount = sharedTasks.filter(t => t.status !== 'done').length;
-                    const checklistCount = activeChecklists.length;
-                    if (pendingCount === 0 && checklistCount === 0) return null;
-                    return (
-                      <button onClick={() => setActiveSection('action-items')}
-                        className="w-full bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-6 text-left hover:bg-white/[0.08] transition">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">✅</span>
-                            <div>
-                              <div className="text-sm font-semibold text-white">Action Items</div>
-                              <div className="text-[11px] text-white/40">
-                                {pendingCount > 0 && `${pendingCount} task${pendingCount !== 1 ? 's' : ''}`}
-                                {pendingCount > 0 && checklistCount > 0 && ' · '}
-                                {checklistCount > 0 && `${checklistCount} checklist${checklistCount !== 1 ? 's' : ''}`}
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronDown className="w-4 h-4 text-white/30 -rotate-90" />
-                        </div>
-                      </button>
-                    );
-                  })()}
                 </div>
               )}
 
@@ -1691,6 +1574,10 @@ export default function RainbowRentals() {
                 <TenantsList
                   properties={properties}
                   canManage={canManage}
+                  onTextTenant={(propertyId, tenant) => {
+                    const prop = properties.find(p => String(p.id) === String(propertyId));
+                    if (prop) setShowReminder({ property: prop, tenant, monthKey: new Date().toISOString().slice(0, 7), templateId: 'custom' });
+                  }}
                   onDeleteTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
                     setConfirmDialog({
@@ -1919,56 +1806,33 @@ export default function RainbowRentals() {
                     </div>
                   )}
 
-                  {/* Lease Alerts — Expired or Expiring Within 30 Days */}
+                  {/* Lease Alerts — fixed-term leases expired, or any lease ending within 30 days.
+                      Leases past their end date are month-to-month unless marked fixed-term. */}
                   {(() => {
-                    const leaseAlerts = [];
-                    properties.forEach(p => {
-                      const tenants = getPropertyTenants(p);
-                      tenants.forEach(t => {
-                        if (!t.leaseEnd) return;
-                        const end = new Date(t.leaseEnd + 'T00:00:00');
-                        const today = new Date(); today.setHours(0, 0, 0, 0);
-                        const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-                        if (days <= 30) {
-                          leaseAlerts.push({ property: p, tenant: t, days, expired: days <= 0 });
-                        }
-                      });
-                    });
-                    // Sort: expired first, then by days ascending
-                    leaseAlerts.sort((a, b) => a.days - b.days);
-
-                    if (leaseAlerts.length === 0) return null;
+                    const alerts = leaseAlerts(properties);
+                    if (alerts.length === 0) return null;
                     return (
                       <div className="mb-6">
                         <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">Lease Alerts</h3>
                         <div className="space-y-2">
-                          {leaseAlerts.map((alert, idx) => (
-                            <button key={`${alert.property.id}-${alert.tenant.id || idx}`}
-                              onClick={() => { setActiveSection('rentals'); setSelectedProperty(alert.property); }}
+                          {alerts.map(alert => (
+                            <button
+                              key={`${alert.property.id}-${alert.tenant.id || alert.tenant.name}`}
+                              onClick={() => setShowTenantModal({ ...alert.property, _editTenant: alert.tenant })}
                               className={`w-full text-left p-3 rounded-2xl border transition ${
-                                alert.expired
-                                  ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                                  : 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/15'
+                                alert.kind === 'expired' ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15' : 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/15'
                               }`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm">{alert.property.emoji || '🏠'}</span>
-                                  <div>
-                                    <span className={`text-sm font-medium ${alert.expired ? 'text-red-400' : 'text-orange-400'}`}>
-                                      {alert.property.name}
-                                    </span>
-                                    {alert.tenant.name && (
-                                      <span className="text-xs text-white/40 ml-2">({alert.tenant.name})</span>
-                                    )}
-                                  </div>
+                                  <span className={`text-sm font-medium ${alert.color}`}>{alert.property.name}</span>
+                                  {alert.tenant.name && <span className="text-xs text-white/40">({alert.tenant.name})</span>}
                                 </div>
-                                <span className={`text-xs font-semibold ${alert.expired ? 'text-red-400' : 'text-orange-400'}`}>
-                                  {alert.expired ? 'Expired' : `${alert.days}d left`}
-                                </span>
+                                <span className={`text-xs font-semibold ${alert.color}`}>{alert.label}</span>
                               </div>
                               <p className="text-[11px] text-white/40 mt-1">
-                                {alert.expired ? 'Lease has expired — renew or update' : 'Lease expiring soon — plan renewal'}
+                                {alert.kind === 'expired' ? 'Fixed-term lease ended — renew, or mark it month-to-month' : 'Lease ends soon — renew or let it roll to month-to-month'}
                               </p>
                             </button>
                           ))}

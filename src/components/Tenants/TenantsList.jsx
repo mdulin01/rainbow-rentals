@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X, Trash2 } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X, Trash2, MessageSquare } from 'lucide-react';
 import { normalizePhone } from '../../utils';
-import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty } from '../../rentLogic.js';
+import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty, leaseState, tenantRent, getPropertyTenants as propTenants } from '../../rentLogic.js';
 import { tenantStatuses } from '../../constants';
-import { formatDate, formatCurrency, getDaysUntil } from '../../utils';
+import { formatDate, formatCurrency } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
-export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, onDeleteTenant, canManage = true }) {
+export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, onDeleteTenant, onTextTenant, canManage = true }) {
   const [showImport, setShowImport] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [preview, setPreview] = useState(null); // [{ name, phone, address, propertyId, exists }]
@@ -26,6 +26,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
           propertyId: p.id,
           propertyName: p.name,
           propertyEmoji: p.emoji || '🏠',
+          rentDisplay: tenantRent(t, p),
         });
       });
     });
@@ -58,7 +59,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
         case 'name': return dir * (a.name || '').localeCompare(b.name || '');
         case 'property': return dir * (a.propertyName || '').localeCompare(b.propertyName || '');
         case 'status': return dir * (a.status || '').localeCompare(b.status || '');
-        case 'rent': return dir * ((parseFloat(a.monthlyRent) || 0) - (parseFloat(b.monthlyRent) || 0));
+        case 'rent': return dir * ((a.rentDisplay || 0) - (b.rentDisplay || 0));
         case 'deposit': return dir * ((parseFloat(a.securityDeposit) || 0) - (parseFloat(b.securityDeposit) || 0));
         case 'leaseEnd': return dir * (a.leaseEnd || '9999').localeCompare(b.leaseEnd || '9999');
         default: return 0;
@@ -88,7 +89,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
     return <span className={`text-xs font-medium ${s.color}`}>{s.label}</span>;
   };
 
-  const vacantCount = properties.filter(p => !p.tenant || p.tenant.status === 'vacant').length;
+  const vacantCount = properties.filter(p => propTenants(p).filter(t => t.status !== 'former').length === 0 && p.propertyStatus !== 'owner-occupied').length;
 
   return (
     <div>
@@ -278,7 +279,6 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
               </thead>
               <tbody>
                 {sorted.map((tenant, idx) => {
-                  const daysLeft = tenant.leaseEnd ? getDaysUntil(tenant.leaseEnd) : null;
                   return (
                     <tr
                       key={`${tenant.propertyId}-${idx}`}
@@ -298,15 +298,10 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                       </td>
                       <td className="px-4 py-3">{getStatusBadge(tenant.status)}</td>
                       <td className="px-4 py-3">
-                        {tenant.leaseEnd ? (
+                        {(tenant.leaseEnd || tenant.leaseType === 'month-to-month') ? (
                           <div>
-                            <span className="text-sm text-white/70">{formatDate(tenant.leaseEnd)}</span>
-                            {daysLeft !== null && daysLeft <= 30 && daysLeft >= 0 && (
-                              <span className="text-xs text-orange-400 ml-2">{daysLeft}d left</span>
-                            )}
-                            {daysLeft !== null && daysLeft < 0 && (
-                              <span className="text-xs text-red-400 ml-2">Expired</span>
-                            )}
+                            {tenant.leaseEnd && <span className="text-sm text-white/70">{formatDate(tenant.leaseEnd)}</span>}
+                            {(() => { const st = leaseState(tenant); return st.short ? <span className={`text-xs ml-2 ${st.color}`}>{st.short}</span> : null; })()}
                           </div>
                         ) : (
                           <span className="text-sm text-white/30">—</span>
@@ -314,7 +309,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-medium text-emerald-400">
-                          {tenant.monthlyRent ? formatCurrency(tenant.monthlyRent) : '—'}
+                          {tenant.rentDisplay ? formatCurrency(tenant.rentDisplay) : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -333,6 +328,12 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                             <a href={`tel:${tenant.phone}`} onClick={e => e.stopPropagation()} className="text-white/40 hover:text-white/70">
                               <Phone className="w-4 h-4" />
                             </a>
+                          )}
+                          {canManage && onTextTenant && tenant.phone && tenant.smsOk !== false && (
+                            <button onClick={e => { e.stopPropagation(); onTextTenant(tenant.propertyId, tenant); }}
+                              className="text-teal-300/80 hover:text-teal-300" title={`Text ${tenant.name}`}>
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
                           )}
                           {canManage && onDeleteTenant && (
                             <button onClick={e => { e.stopPropagation(); onDeleteTenant(tenant.propertyId, tenant); }}

@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
-import { formatDate, formatCurrency } from '../../utils';
+import { formatDate, formatCurrency, currentMonthKey, todayLocalStr } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
+import { computeRentRows } from '../../rentLogic.js';
 
 export default function RentLedger({ rentPayments, properties, onAdd, onEdit, onDelete, showToast }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,13 +98,11 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
     );
   };
 
-  // Summary stats - use property-level monthlyRent (total per property, not per-tenant)
-  const totalExpected = properties.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0);
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const thisMonthPayments = rentPayments.filter(r => r.month === currentMonth);
-  const collected = thisMonthPayments.filter(r => r.status === 'paid').reduce((sum, r) => sum + (r.amount || 0), 0);
-  const outstanding = totalExpected - collected;
+  // Summary stats — same calculation as Rent Day (rent-collecting properties only).
+  const monthRows = computeRentRows({ properties, rentPayments, monthKey: currentMonthKey(), today: todayLocalStr() });
+  const totalExpected = monthRows.reduce((s, r) => s + r.due, 0);
+  const collected = monthRows.reduce((s, r) => s + Math.min(r.paid, r.due), 0);
+  const outstanding = monthRows.reduce((s, r) => s + r.balance, 0);
 
   return (
     <div>

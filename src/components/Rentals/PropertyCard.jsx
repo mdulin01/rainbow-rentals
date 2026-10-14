@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MoreVertical, MapPin, DollarSign, Trash2, Edit3, Eye, FileText, Clock, Users } from 'lucide-react';
 import { propertyStatuses, expenseCategories } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
+import { leaseState } from '../../rentLogic.js';
 
 const formatCur = (n) => {
   const num = parseFloat(n) || 0;
@@ -90,14 +91,12 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
   const statusObj = propertyStatuses.find(s => s.value === propStatus) || propertyStatuses[1];
 
   // Lease countdown
+  // Soonest lease that still has a countdown; month-to-month shows as MTM.
   const getLeaseInfo = () => {
-    const activeTenants = tenants.filter(t => t.leaseEnd);
-    if (activeTenants.length === 0) return null;
-    const soonest = [...activeTenants].sort((a, b) => a.leaseEnd.localeCompare(b.leaseEnd))[0];
-    const end = new Date(soonest.leaseEnd + 'T00:00:00');
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const days = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-    return { days, name: soonest.name };
+    const states = tenants.filter(t => t.status !== 'former').map(t => ({ t, st: leaseState(t) })).filter(x => x.st.kind !== 'none');
+    if (states.length === 0) return null;
+    const ranked = states.sort((a, b) => (a.st.days ?? 9999) - (b.st.days ?? 9999));
+    return ranked[0].st;
   };
   const leaseInfo = getLeaseInfo();
 
@@ -171,11 +170,9 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
                   {statusObj.label}
                 </span>
                 {leaseInfo && (
-                  <span className={`text-[10px] font-medium flex items-center gap-0.5 ${
-                    leaseInfo.days <= 0 ? 'text-red-400' : leaseInfo.days <= 30 ? 'text-orange-400' : leaseInfo.days <= 90 ? 'text-yellow-400' : 'text-white/30'
-                  }`}>
+                  <span className={`text-[10px] font-medium flex items-center gap-0.5 ${leaseInfo.color}`}>
                     <Clock className="w-3 h-3" />
-                    {leaseInfo.days <= 0 ? 'Expired' : `${leaseInfo.days}d`}
+                    {leaseInfo.short}
                   </span>
                 )}
                 {leaseDoc && (

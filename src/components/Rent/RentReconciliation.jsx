@@ -1,3 +1,4 @@
+import { getLeaseTerms } from '../../rentLogic.js';
 import React, { useState, useMemo } from 'react';
 import { formatCurrency } from '../../utils';
 
@@ -14,7 +15,6 @@ import { formatCurrency } from '../../utils';
  */
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const RENT_COLLECTING = ['occupied', 'lease-expired', 'month-to-month'];
-const GRACE_DAY = 5; // a payment dated after the 5th of its rent month counts as "late"
 
 export default function RentReconciliation({ properties, rentPayments, getEffectiveStatus, onRecordRent, incomeActuals }) {
   const now = new Date();
@@ -22,7 +22,7 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
   const currentMonthIdx = now.getMonth(); // 0-based
   const curKey = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
   const recordedThisMonth = rentPayments
-    .filter(r => (r.status === 'paid' || r.status === 'partial') && (r.incomeType === 'rent' || !r.incomeType) && (r.datePaid || r.month || '').startsWith(curKey))
+    .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.incomeType === 'rent' || !r.incomeType) && (r.datePaid || r.month || '').startsWith(curKey))
     .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   const depositedThisMonth = (incomeActuals && incomeActuals.months && incomeActuals.months[curKey] && incomeActuals.months[curKey].total) || 0;
   const reconDiff = depositedThisMonth - recordedThisMonth;
@@ -46,7 +46,7 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
     const matches = rentPayments.filter(r => {
       if (String(r.propertyId) !== String(prop.id)) return false;
       if (r.incomeType && r.incomeType !== 'rent') return false;
-      if (r.status && r.status !== 'paid' && r.status !== 'partial') return false;
+      if (r.status && !['paid', 'partial', 'late'].includes(r.status)) return false;
       const period = (r.month || r.datePaid || '');
       return period.startsWith(monthKey);
     });
@@ -55,7 +55,8 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
       if (r.status === 'late') return true;
       if (r.datePaid) {
         const d = new Date(r.datePaid + 'T00:00:00');
-        if (d.getFullYear() === year && d.getMonth() === monthIdx && d.getDate() > GRACE_DAY) return true;
+        const terms = getLeaseTerms(prop);
+        if (d.getFullYear() === year && d.getMonth() === monthIdx && d.getDate() > terms.dueDay - 1 + terms.graceDays) return true;
       }
       return false;
     });

@@ -17,6 +17,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
     phone: '',
     leaseStart: '',
     leaseEnd: '',
+    leaseType: '',
     monthlyRent: '',
     securityDeposit: '',
     status: 'active',
@@ -49,6 +50,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
         phone: tenant.phone || '',
         leaseStart: tenant.leaseStart || '',
         leaseEnd: tenant.leaseEnd || '',
+        leaseType: tenant.leaseType || '',
         monthlyRent: tenant.monthlyRent || '',
         securityDeposit: tenant.securityDeposit || '',
         status: tenant.status || 'pending',
@@ -76,6 +78,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
       phone: '',
       leaseStart: '',
       leaseEnd: '',
+      leaseType: '',
       monthlyRent: '',
       securityDeposit: '',
       status: 'active',
@@ -307,6 +310,17 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
                   className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
                 />
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-sm mb-2">After the end date</label>
+                <div className="flex flex-wrap gap-2">
+                  {[['', 'Rolls to month-to-month (default)'], ['month-to-month', 'Month-to-month now'], ['fixed', 'Fixed term — alert me when it ends']].map(([v, l]) => (
+                    <button key={v} type="button" onClick={() => setFormData(prev => ({ ...prev, leaseType: v }))}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium border transition ${formData.leaseType === v ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300' : 'bg-white/[0.05] border-white/[0.08] text-white/50 hover:bg-white/10'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -315,7 +329,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
             <h3 className="text-white font-semibold mb-4">Financial Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-400 text-sm mb-2">Monthly Rent</label>
+                <label className="block text-slate-400 text-sm mb-2">Monthly Rent <span className="text-slate-500">(this tenant's share — the property's rent is what gets collected)</span></label>
                 <input
                   type="number"
                   name="monthlyRent"

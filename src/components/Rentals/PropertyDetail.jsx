@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ArrowLeft, Edit3, MapPin, User, DollarSign, Calendar, Phone, Mail, FileText, Image, Trash2, Plus, Lightbulb, X, Globe, Building2, TrendingUp, TrendingDown, Wrench, AlertTriangle } from 'lucide-react';
 import { tenantStatuses, capitalConditions } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
+import { leaseState } from '../../rentLogic.js';
 
 const formatCurrency = (amount) => {
   const num = parseFloat(amount) || 0;
@@ -29,15 +30,6 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
 
   const getTenantStatusInfo = (status) => {
     return tenantStatuses.find(s => s.value === status);
-  };
-
-  const getDaysUntilExpiration = (leaseEnd) => {
-    if (!leaseEnd) return null;
-    const end = new Date(leaseEnd);
-    const today = new Date();
-    const diffTime = end - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
   };
 
   // Financial calculations
@@ -279,7 +271,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
               {tenants.length > 0 ? (
                 <div className="space-y-4">
                   {tenants.map((tenant, idx) => {
-                    const daysLeft = getDaysUntilExpiration(tenant.leaseEnd);
+                    const lease = leaseState(tenant);
                     return (
                       <div key={tenant.id || idx} className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
                         <div className="flex items-start justify-between mb-3">
@@ -325,11 +317,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                           {tenant.leaseEnd && (
                             <div className="flex items-center gap-1.5 text-white/60">
                               <Calendar className="w-3.5 h-3.5" /> End: {tenant.leaseEnd}
-                              {daysLeft !== null && daysLeft <= 60 && (
-                                <span className={`text-xs ml-1 ${daysLeft <= 30 ? 'text-orange-400' : 'text-yellow-400'}`}>
-                                  ({daysLeft}d left)
-                                </span>
-                              )}
+                              {lease.kind !== 'none' && <span className={`text-xs ml-1 ${lease.color}`}>({lease.label})</span>}
                             </div>
                           )}
                           {tenant.monthlyRent && (

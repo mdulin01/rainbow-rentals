@@ -2,7 +2,7 @@
 // (Rent Day, composer, Action Items) and the Vercel API functions (daily reminder cron,
 // inbound SMS). No React, no Firebase, no browser globals.
 import { reminderTemplates } from './constants.js';
-import { formatCurrency, formatDate, monthName, rentDueDateStr, fillTemplate, parseLocalDate, normalizePhone } from './utils.js';
+import { formatCurrency, formatDate, monthName, rentDueDateStr, fillTemplate, parseLocalDate, normalizePhone, todayLocalStr } from './utils.js';
 
 /** Tenants array from a property, handling legacy single-tenant data. */
 export const getPropertyTenants = (property) => {
@@ -207,3 +207,37 @@ export const matchPropertyByAddress = (address, properties) => {
   }) || null;
 };
 
+
+// ---- Lease state (one implementation for every tab) ----
+// A lease past its end date is month-to-month unless the tenant is marked fixed-term
+// (tenant.leaseType === 'fixed') or explicitly month-to-month from the start.
+export const leaseState = (tenant, today = todayLocalStr()) => {
+  if (!tenant) return { kind: 'none', days: null, label: '', color: 'text-white/30' };
+  if (tenant.leaseType === 'month-to-month') {
+    return { kind: 'month-to-month', days: null, label: tenant.leaseEnd ? `Month-to-month since ${formatDate(tenant.leaseEnd)}` : 'Month-to-month', short: 'MTM', color: 'text-white/50' };
+  }
+  if (!tenant.leaseEnd) return { kind: 'none', days: null, label: '', color: 'text-white/30' };
+  const days = Math.round((parseLocalDate(tenant.leaseEnd) - parseLocalDate(today)) / 86400000);
+  if (days < 0) {
+    if (tenant.leaseType === 'fixed') return { kind: 'expired', days, label: `Expired ${formatDate(tenant.leaseEnd)}`, short: 'Expired', color: 'text-red-400' };
+    return { kind: 'month-to-month', days, label: `Month-to-month since ${formatDate(tenant.leaseEnd)}`, short: 'MTM', color: 'text-white/50' };
+  }
+  if (days <= 30) return { kind: 'expiring', days, label: `${days}d left`, short: `${days}d`, color: 'text-orange-400' };
+  if (days <= 90) return { kind: 'active', days, label: `${days}d left`, short: `${days}d`, color: 'text-yellow-400' };
+  return { kind: 'active', days, label: `${days}d left`, short: `${days}d`, color: 'text-white/40' };
+};
+
+/** Tenants whose lease needs attention: expiring within 30 days, or fixed-term and expired. */
+export const leaseAlerts = (properties, today = todayLocalStr()) => {
+  const out = [];
+  properties.forEach(p => getPropertyTenants(p).forEach(t => {
+    if (t.status === 'former') return;
+    const st = leaseState(t, today);
+    if (st.kind === 'expiring' || st.kind === 'expired') out.push({ property: p, tenant: t, ...st });
+  }));
+  return out.sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+};
+
+/** Rent a tenant is on the hook for, for display: their own share if set, else the property rent. */
+export const tenantRent = (tenant, property) =>
+  parseFloat(tenant?.monthlyRent) || parseFloat(property?.monthlyRent) || 0;
