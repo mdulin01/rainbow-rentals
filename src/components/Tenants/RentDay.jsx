@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, MessageSquare, Mail, Settings, Phone, StickyNote, Check } from 'lucide-react';
 import { formatCurrency, formatDate, monthName, currentMonthKey, todayLocalStr, timeAgo } from '../../utils';
-import { computeRentRows } from '../../rentLogic.js';
+import { computeRentRows, unpaidPriorMonths, getPropertyTenants } from '../../rentLogic.js';
 
 const shiftMonth = (key, delta) => {
   const [y, m] = key.split('-').map(Number);
@@ -27,6 +27,9 @@ export default function RentDay({
 
   const rows = useMemo(() => computeRentRows({ properties, rentPayments, commsLog, settings, monthKey, today })
     .map(r => ({ ...r, monthKey })), [properties, rentPayments, commsLog, settings, monthKey, today]);
+
+  const prior = useMemo(() => monthKey === currentMonthKey()
+    ? unpaidPriorMonths({ properties, rentPayments, monthKey }) : [], [properties, rentPayments, monthKey]);
 
   const totals = useMemo(() => ({
     due: rows.reduce((s, r) => s + r.due, 0),
@@ -274,6 +277,43 @@ export default function RentDay({
           );
         })}
       </div>
+
+      {/* Earlier months still owed */}
+      {prior.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-red-400/80 uppercase tracking-wide mb-2">Still owed from earlier months ({prior.length})</h3>
+          <div className="space-y-2">
+            {prior.map(({ property: p, monthKey: mk, due }) => {
+              const t = getPropertyTenants(p).find(x => x.phone && x.smsOk !== false && x.status !== 'vacant');
+              return (
+                <div key={`${p.id}-${mk}`} className="flex items-center justify-between gap-2 rounded-2xl border bg-red-500/10 border-red-500/20 p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg flex-shrink-0">{p.emoji || '🏠'}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                      <p className="text-xs text-red-300">{monthName(mk)} · not recorded</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-sm font-bold text-white">{formatCurrency(due)}</span>
+                    {canManage && t && (
+                      <button onClick={() => onCompose({ property: p, tenant: t, monthKey: mk, templateId: 'late', amountDue: due, balance: due })}
+                        className="w-8 h-8 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 flex items-center justify-center" title={`Text ${t.name}`}>
+                        <MessageSquare className="w-4 h-4 text-teal-300" />
+                      </button>
+                    )}
+                    {canManage && (
+                      <button onClick={() => onRecord({ incomeType: 'rent', propertyId: p.id, month: mk, amount: due, status: 'paid' })}
+                        className="px-3 py-1 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold transition">Record</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-white/30 mt-2">If a month was actually paid, record it (any amount, even $0 for a vacant month) and it drops off this list.</p>
+        </div>
+      )}
 
       {/* Recent activity across all tenants */}
       {commsLog.length > 0 && (

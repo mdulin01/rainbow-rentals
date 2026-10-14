@@ -157,3 +157,53 @@ export const computeAutoRows = ({ properties, rentPayments, commsLog, settings, 
     ...mk(shiftMonthKey(monthKey, 1), 'upcoming-only'),
   ];
 };
+
+/**
+ * Earlier months of this year still unpaid (any paid/partial/late record settles a month,
+ * matching the Reconcile tab). Returns [{ property, monthKey, due }] oldest first.
+ */
+export const unpaidPriorMonths = ({ properties, rentPayments, monthKey }) => {
+  const [y, m] = monthKey.split('-').map(Number);
+  const out = [];
+  for (let mm = 1; mm < m; mm++) {
+    const key = `${y}-${String(mm).padStart(2, '0')}`;
+    rentProperties(properties).forEach(p => {
+      const settled = rentPayments.some(r => String(r.propertyId) === String(p.id)
+        && ['paid', 'partial', 'late'].includes(r.status)
+        && (r.month || r.datePaid || '').startsWith(key));
+      if (!settled) out.push({ property: p, monthKey: key, due: parseFloat(p.monthlyRent) || 0 });
+    });
+  }
+  return out;
+};
+
+// ---- Tenant list import (Tenants → Paste list) ----
+// Parse a pasted list (markdown table, tab- or comma-separated): name, address, phone in any order.
+const PHONE_RE = /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
+export const parsePastedTenants = (text) => {
+  const rows = [];
+  text.split(/\r?\n/).forEach(line => {
+    const raw = line.trim();
+    if (!raw || /^\|?\s*-{2,}/.test(raw)) return;
+    let cells = raw.includes('|') ? raw.split('|') : raw.includes('\t') ? raw.split('\t') : raw.split(',');
+    cells = cells.map(c => c.trim()).filter(Boolean);
+    if (cells.length < 2) return;
+    const phone = cells.find(c => PHONE_RE.test(c)) || '';
+    const rest = cells.filter(c => c !== phone);
+    const address = rest.find(c => /\d/.test(c)) || '';
+    const name = rest.find(c => c !== address) || '';
+    if (!name || /^(renter|tenant|name)$/i.test(name)) return;
+    rows.push({ name, address, phone: phone.replace(/[^\d()+\s.-]/g, '').trim() });
+  });
+  return rows;
+};
+const norm = (s) => String(s || '').toLowerCase().replace(/\bnorth\b/g, 'n').replace(/\bsouth\b/g, 's').replace(/\beast\b/g, 'e').replace(/\bwest\b/g, 'w').replace(/[^a-z0-9]/g, '');
+export const matchPropertyByAddress = (address, properties) => {
+  const a = norm(address);
+  if (!a) return null;
+  return properties.find(p => {
+    const n = norm(p.name), ad = norm(p.address);
+    return (ad && (a.includes(ad) || ad.includes(a))) || (n && n.length > 2 && a.includes(n));
+  }) || null;
+};
+

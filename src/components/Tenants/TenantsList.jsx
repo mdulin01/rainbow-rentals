@@ -1,10 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X } from 'lucide-react';
+import { normalizePhone } from '../../utils';
+import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty } from '../../rentLogic.js';
 import { tenantStatuses } from '../../constants';
 import { formatDate, formatCurrency, getDaysUntil } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
-export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty }) {
+export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, canManage = true }) {
+  const [showImport, setShowImport] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [preview, setPreview] = useState(null); // [{ name, phone, address, propertyId, exists }]
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortCol, setSortCol] = useState('name');
@@ -92,13 +98,91 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
           <h2 className="text-xl font-bold text-white">Tenants</h2>
           <p className="text-xs text-white/40">{allTenants.length} tenants across {properties.length} properties</p>
         </div>
-        <button
-          onClick={onAddTenant}
-          className="flex items-center gap-1.5 px-3 py-2 bg-teal-500 text-white rounded-xl text-sm font-medium hover:bg-teal-600 transition"
-        >
-          <Plus className="w-4 h-4" /> Add Tenant
-        </button>
+        <div className="flex gap-2">
+          {canManage && onImportTenants && (
+            <button
+              onClick={() => { setShowImport(true); setPreview(null); }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white/10 text-white rounded-xl text-sm font-medium hover:bg-white/20 transition"
+              title="Paste a list of names, addresses and phones"
+            >
+              <ClipboardPaste className="w-4 h-4" /> Paste list
+            </button>
+          )}
+          <button
+            onClick={onAddTenant}
+            className="flex items-center gap-1.5 px-3 py-2 bg-teal-500 text-white rounded-xl text-sm font-medium hover:bg-teal-600 transition"
+          >
+            <Plus className="w-4 h-4" /> Add Tenant
+          </button>
+        </div>
       </div>
+
+      {showImport && (
+        <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowImport(false)} />
+          <div className="relative w-full max-w-2xl bg-slate-800 border border-white/10 rounded-t-3xl md:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-white">Paste a tenant list</h2>
+              <button onClick={() => setShowImport(false)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"><X className="w-4 h-4 text-white/60" /></button>
+            </div>
+            {!preview ? (
+              <>
+                <p className="text-xs text-white/40 mb-2">One tenant per line: name, property address, mobile. Columns can be separated by | , or tabs. A header row is fine.</p>
+                <textarea rows={8} value={pasteText} onChange={e => setPasteText(e.target.value)}
+                  placeholder={'Jane Doe | 412 Hillcrest Dr | (336) 555-1234\nJohn Roe | 2819 Green Crest Ct | 336-555-9876'}
+                  className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-teal-500/50 font-mono" />
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => {
+                    const rows = parsePasted(pasteText);
+                    setPreview(rows.map(r => {
+                      const prop = matchProperty(r.address, properties);
+                      const exists = prop ? allTenants.some(t => String(t.propertyId) === String(prop.id) && (normalizePhone(t.phone) === normalizePhone(r.phone) || (t.name || '').toLowerCase() === r.name.toLowerCase())) : false;
+                      return { ...r, propertyId: prop ? String(prop.id) : '', exists };
+                    }));
+                  }} disabled={!pasteText.trim()}
+                    className="flex-1 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition">Preview</button>
+                  <button onClick={() => setShowImport(false)} className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm transition">Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {preview.length === 0 && <p className="text-sm text-white/50">Nothing I could read. Each line needs at least a name and a phone or address.</p>}
+                <div className="space-y-2">
+                  {preview.map((r, i) => (
+                    <div key={i} className={`grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr] gap-2 items-center rounded-xl px-3 py-2 ${r.exists ? 'bg-white/[0.03] opacity-60' : 'bg-white/[0.05]'}`}>
+                      <div className="min-w-0"><p className="text-sm text-white truncate">{r.name}</p><p className="text-[11px] text-white/40 truncate">{r.address || 'no address'}</p></div>
+                      <p className="text-xs text-white/70">{r.phone || <span className="text-orange-300">no phone</span>}{r.exists && <span className="text-white/40"> · already listed, skipped</span>}</p>
+                      <select value={r.propertyId} onChange={e => setPreview(pv => pv.map((x, j) => j === i ? { ...x, propertyId: e.target.value } : x))}
+                        className="w-full px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-lg text-xs text-white focus:outline-none focus:border-teal-500/50">
+                        <option value="" className="bg-slate-800">— skip (no property match) —</option>
+                        {properties.map(p => <option key={p.id} value={String(p.id)} className="bg-slate-800">{p.emoji || '🏠'} {p.name}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => {
+                    const items = preview.filter(r => r.propertyId && !r.exists).map(r => {
+                      const parts = r.name.trim().split(/\s+/);
+                      return { propertyId: r.propertyId, tenant: {
+                        name: r.name.trim(), firstName: parts[0] || '', lastName: parts.slice(1).join(' '),
+                        phone: r.phone, email: '', status: 'active', smsOk: true, leaseStart: '', leaseEnd: '', monthlyRent: '', securityDeposit: '',
+                      } };
+                    });
+                    onImportTenants(items);
+                    setShowImport(false); setPasteText(''); setPreview(null);
+                  }} disabled={!preview.some(r => r.propertyId && !r.exists)}
+                    className="flex-1 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition">
+                    Add {preview.filter(r => r.propertyId && !r.exists).length} tenant{preview.filter(r => r.propertyId && !r.exists).length === 1 ? '' : 's'}
+                  </button>
+                  <button onClick={() => setPreview(null)} className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm transition">Back</button>
+                </div>
+                <p className="text-[11px] text-white/30 mt-3">Added tenants are marked active and OK to text. Open each one afterwards to add lease dates, due day and late fee.</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">

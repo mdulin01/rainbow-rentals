@@ -130,9 +130,7 @@ export default function RainbowRentals() {
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showMobileSectionDropdown, setShowMobileSectionDropdown] = useState(false);
   const [dashboardReportMonth, setDashboardReportMonth] = useState(null); // null = current month, 0-11 = specific month, 12 = YTD
-  const [weeklySentAt, setWeeklySentAt] = useState(null); // Liam's 'Done & send' for this week
   const [pushState, setPushState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
-  const [availChecked, setAvailChecked] = useState(false); // Liam's weekly 'updated rents in Avail' tick
   const [incomeActuals, setIncomeActuals] = useState(null); // bank deposits from mikesmoney (rupert bridge)
   const [cardInbox, setCardInbox] = useState(null); // Citi •4793 charges to confirm (rupert bridge)
   const [handledInboxIds, setHandledInboxIds] = useState([]); // optimistic hide after confirm/dismiss
@@ -251,37 +249,6 @@ export default function RainbowRentals() {
     addInvestor, updateInvestor, deleteInvestor,
   } = ownershipHook;
 
-  // ========== WEEKLY NOTES (Liam ↔ Mike) ==========
-  // rentalData/weeklyNotes — running feed of short notes shared between the two
-  // operators, surfaced in the "This week's update" card (capped 100, newest first).
-  const [weeklyNotes, setWeeklyNotes] = useState([]);
-  const [noteDraft, setNoteDraft] = useState('');
-  const [showAllNotes, setShowAllNotes] = useState(false);
-  const weeklyNotesRef = useRef([]);
-  useEffect(() => { weeklyNotesRef.current = weeklyNotes; }, [weeklyNotes]);
-
-  const saveWeeklyNotes = async (next) => {
-    setWeeklyNotes(next);
-    try {
-      await setDoc(doc(db, 'rentalData', 'weeklyNotes'),
-        JSON.parse(JSON.stringify({ notes: next, lastUpdated: new Date().toISOString() })), { merge: true });
-    } catch (e) { console.error('weeklyNotes save:', e); showToast && showToast('Note not saved — ' + e.message, 'error'); }
-  };
-
-  const addWeeklyNote = useCallback(async () => {
-    const text = (noteDraft || '').trim();
-    if (!text || !user) return;
-    const note = { id: `note-${Date.now()}`, text: text.slice(0, 1000), by: currentUser || 'unknown', at: new Date().toISOString() };
-    setNoteDraft('');
-    await saveWeeklyNotes([note, ...weeklyNotesRef.current].slice(0, 100));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteDraft, user, currentUser]);
-
-  const deleteWeeklyNote = useCallback(async (id) => {
-    await saveWeeklyNotes(weeklyNotesRef.current.filter(n => n.id !== id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ========== TENANT COMMS (Rent Day) ==========
   // rentalData/comms — { settings: { payInstructions, fromName, dueDay, graceDays, lateFee },
   // log: [...] } — every reminder/text/email/call/note logged by either operator (capped 500,
@@ -289,7 +256,6 @@ export default function RainbowRentals() {
   const [commsSettings, setCommsSettings] = useState({});
   const [commsLog, setCommsLog] = useState([]);
   const [showReminder, setShowReminder] = useState(null); // { property, tenant, monthKey, templateId, ... }
-  const [tenantsView, setTenantsView] = useState('rentday'); // 'rentday' | 'list'
   const commsLogRef = useRef([]);
   useEffect(() => { commsLogRef.current = commsLog; }, [commsLog]);
 
@@ -458,7 +424,7 @@ export default function RainbowRentals() {
     try {
       const p = new URLSearchParams(window.location.search);
       if (p.get('section') === 'analysis') { setActiveSection('rentals'); setPropertyViewMode('overview'); window.history.replaceState({}, '', window.location.pathname); }
-      if (p.get('section') === 'rentday') { setActiveSection('tenants'); setTenantsView('rentday'); window.history.replaceState({}, '', window.location.pathname); }
+      if (p.get('section') === 'rentday') { setActiveSection('action-items'); window.history.replaceState({}, '', window.location.pathname); }
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -768,13 +734,10 @@ export default function RainbowRentals() {
     const u2 = onSnapshot(doc(db, 'rentalData', 'trash'),
       (snap) => { if (snap.exists()) setTrashItems(snap.data().items || []); },
       (e) => console.error('trash load:', e));
-    const u3 = onSnapshot(doc(db, 'rentalData', 'weeklyNotes'),
-      (snap) => { if (snap.exists()) setWeeklyNotes(snap.data().notes || []); },
-      (e) => console.error('weeklyNotes load:', e));
     const u4 = onSnapshot(doc(db, 'rentalData', 'comms'),
       (snap) => { if (snap.exists()) { const d = snap.data(); setCommsLog(d.log || []); setCommsSettings(d.settings || {}); } },
       (e) => console.error('comms load:', e));
-    return () => { u1(); u2(); u3(); u4(); };
+    return () => { u1(); u2(); u4(); };
   }, [user]);
 
   const resolveReviewItem = async (itemId, patch) => {
@@ -1720,33 +1683,14 @@ export default function RainbowRentals() {
               )}
 
               {/* ========== TENANTS SECTION ========== */}
-              {activeSection === 'tenants' && canManage && (
-                <div className="flex gap-1.5 mb-4">
-                  {[{ id: 'rentday', label: '📣 Rent Day' }, { id: 'list', label: '👤 All Tenants' }].map(v => (
-                    <button key={v.id} onClick={() => setTenantsView(v.id)}
-                      className={`px-3 py-2 rounded-xl text-xs font-medium transition ${tenantsView === v.id ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {activeSection === 'tenants' && canManage && tenantsView === 'rentday' && (
-                <RentDay
-                  properties={properties}
-                  rentPayments={rentPayments}
-                  commsLog={commsLog}
-                  settings={commsSettings}
-                  currentUser={currentUser}
-                  canManage={canManage}
-                  onSaveSettings={saveCommsSettings}
-                  onCompose={(target) => setShowReminder(target)}
-                  onRecord={(prefill) => setShowAddRentModal(prefill)}
-                  onPatchLog={patchComm}
-                />
-              )}
-              {activeSection === 'tenants' && (!canManage || tenantsView === 'list') && (
+              {activeSection === 'tenants' && (
                 <TenantsList
                   properties={properties}
+                  canManage={canManage}
+                  onImportTenants={(items) => {
+                    items.forEach(({ propertyId, tenant }) => addOrUpdateTenant(propertyId, tenant));
+                    showToast(`${items.length} tenant${items.length === 1 ? '' : 's'} added`, 'success');
+                  }}
                   onEditTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
                     if (prop) setShowTenantModal({ ...prop, _editTenant: tenant || null });
@@ -1834,136 +1778,22 @@ export default function RainbowRentals() {
               {/* ========== ACTION ITEMS SECTION ========== */}
               {activeSection === 'action-items' && (
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-4">Action Items</h2>
 
-                  {/* Rents Due / Past Due — scans January through the current month (not just
-                      the current month) so an unpaid prior month, e.g. June rent still unpaid
-                      once July starts, keeps showing up here instead of silently disappearing. */}
-                  {(() => {
-                    const now = new Date();
-                    const currentYear = now.getFullYear();
-                    const currentMonthIdx = now.getMonth(); // 0-based
-                    const dayOfMonth = now.getDate();
-
-                    const rentProps = properties.filter(p =>
-                      ['occupied', 'lease-expired', 'month-to-month'].includes(
-                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-                      ) && (parseFloat(p.monthlyRent) || 0) > 0
-                    );
-
-                    // Every (property, month) from Jan through this month with no paid/partial
-                    // rent recorded — mirrors the Reconcile tab's "Needs attention" logic so a
-                    // missed month stays flagged until it's actually paid, not until the month ends.
-                    const flags = [];
-                    for (let m = 0; m <= currentMonthIdx; m++) {
-                      const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
-                      rentProps.forEach(p => {
-                        // Any paid/partial record settles the month — a $0 'paid' record is the
-                        // deliberate "unit vacant, no rent due" marker (N. Elm Jan-Feb 2026).
-                        const monthRecords = rentPayments
-                          .filter(r => String(r.propertyId) === String(p.id)
-                            && ['paid', 'partial', 'late'].includes(r.status)
-                            && (r.month || r.datePaid || '').startsWith(monthKey));
-                        if (monthRecords.length === 0) {
-                          const terms = getLeaseTerms(p, commsSettings);
-                          const isPastDue = m < currentMonthIdx || dayOfMonth > terms.dueDay - 1 + terms.graceDays;
-                          flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
-                        }
-                      });
-                    }
-
-                    if (flags.length === 0) return null;
-                    flags.sort((a, b) => a.monthIdx - b.monthIdx);
-                    const pastDueFlags = flags.filter(f => f.isPastDue);
-                    const dueFlags = flags.filter(f => !f.isPastDue);
-
-                    const renderRow = (f) => (
-                      <div key={`${f.property.id}-${f.monthKey}`}
-                        onClick={() => { setActiveSection('rent'); }}
-                        className={`w-full text-left p-3 rounded-2xl border transition cursor-pointer ${
-                          f.isPastDue
-                            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                            : 'bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm flex-shrink-0">{f.property.emoji || '🏠'}</span>
-                            <span className={`text-sm font-medium truncate ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>{f.property.name}</span>
-                            <span className="text-[11px] text-white/30 flex-shrink-0">
-                              {new Date(`${f.monthKey}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
-                              {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
-                            </span>
-                            {canManage && (() => {
-                              const t = getPropertyTenants(f.property).find(x => x.phone && x.smsOk !== false && x.status !== 'vacant');
-                              return t ? (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowReminder({ property: f.property, tenant: t, monthKey: f.monthKey, templateId: f.isPastDue ? 'late' : 'due', amountDue: parseFloat(f.property.monthlyRent) || 0 });
-                                  }}
-                                  className="px-3 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition"
-                                  title={`Text ${t.name}`}
-                                >
-                                  Text
-                                </button>
-                              ) : null;
-                            })()}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAddRentModal({
-                                  incomeType: 'rent',
-                                  propertyId: f.property.id,
-                                  propertyName: `${f.property.emoji || '🏠'} ${f.property.name}`,
-                                  tenantName: getPropertyTenants(f.property).map(t => t.name).filter(Boolean).join(', '),
-                                  month: f.monthKey,
-                                  amount: parseFloat(f.property.monthlyRent) || '',
-                                  status: 'paid',
-                                });
-                              }}
-                              className={`px-3 py-1 rounded-lg text-white text-xs font-semibold transition ${
-                                f.isPastDue ? 'bg-red-500/90 hover:bg-red-500' : 'bg-emerald-500/90 hover:bg-emerald-500'
-                              }`}
-                            >
-                              Record
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-
-                    return (
-                      <div className="mb-6">
-                        {pastDueFlags.length > 0 && (
-                          <div className="mb-3">
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Past Due{pastDueFlags.length > 1 ? ` (${pastDueFlags.length})` : ''}
-                            </h3>
-                            <div className="space-y-2">
-                              {pastDueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
-                        {dueFlags.length > 0 && (
-                          <div>
-                            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide mb-3">
-                              Rents Due — {now.toLocaleString('en-US', { month: 'long' })}
-                            </h3>
-                            <div className="space-y-2">
-                              {dueFlags.map(renderRow)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-
+                  {/* ---- Rent Day: this month's collections, replies, reminders, earlier months owed ---- */}
+                  <div className="mb-8">
+                    <RentDay
+                      properties={properties}
+                      rentPayments={rentPayments}
+                      commsLog={commsLog}
+                      settings={commsSettings}
+                      currentUser={currentUser}
+                      canManage={canManage}
+                      onSaveSettings={saveCommsSettings}
+                      onCompose={(target) => setShowReminder(target)}
+                      onRecord={(prefill) => setShowAddRentModal(prefill)}
+                      onPatchLog={patchComm}
+                    />
+                  </div>
 
                   {/* ---- Citi •4793 charges to confirm (managers only) ---- */}
                   {canManage && (
@@ -2011,161 +1841,6 @@ export default function RainbowRentals() {
                         <p className="text-[11px] text-white/30 mt-2">
                           Approve = recorded as a rental expense (Expenses + Schedule E). Dismiss = not a rental expense.
                         </p>
-                      </div>
-                    );
-                  })()}
-
-                  {/* ---- Liam's weekly update card (managers only) ---- */}
-                  {canManage && (() => {
-                    const now = new Date();
-                    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                    // ISO week label
-                    const dt = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-                    const dayNum = (dt.getUTCDay() + 6) % 7; dt.setUTCDate(dt.getUTCDate() - dayNum + 3);
-                    const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
-                    const weekNo = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
-                    const weekId = `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-
-                    const rentedProps = properties.filter(p =>
-                      ['occupied', 'lease-expired', 'month-to-month'].includes(
-                        p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
-                      )
-                    );
-                    const paidPropIds = new Set(
-                      rentPayments
-                        .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.month || r.datePaid || '').startsWith(currentMonth))
-                        .map(r => String(r.propertyId))
-                    );
-                    const unpaidProps = rentedProps.filter(p => !paidPropIds.has(String(p.id)));
-
-                    const sendDone = async () => {
-                      const at = new Date().toISOString();
-                      setWeeklySentAt(at);
-                      try {
-                        await setDoc(doc(db, 'rentalData', 'liamWeekly'), {
-                          week: weekId, by: currentUser || 'Liam', at,
-                          counts: { rentsRecorded: rentedProps.length - unpaidProps.length, rentsOpen: unpaidProps.length, todosOpen: pendingTasks.length, availUpdated: availChecked, notesThisWeek: weeklyNotes.filter(n => n.at >= new Date(Date.now() - 7 * 86400000).toISOString()).length },
-                          mikeNotified: false, // push layer flips this when Mike is alerted
-                        }, { merge: true });
-                        // Ping Mike instantly via mikeslife (his real push token); the daily cron is a backstop.
-                        try { fetch('https://mikeslife.app/api/liam-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {}); } catch (_) { /* best effort */ }
-                        showToast && showToast("Sent! Mike will be notified to pay you. 🎉", 'success');
-                      } catch (e) { showToast && showToast('Saved locally — sync issue: ' + e.message, 'error'); }
-                    };
-
-                    return (
-                      <div className="mb-6 rounded-2xl border border-indigo-400/30 bg-gradient-to-br from-indigo-500/15 to-purple-500/10 p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="text-white font-bold">🗓️ This week's update</h3>
-                          <span className="text-xs text-white/50">{weekId}</span>
-                        </div>
-                        <p className="text-sm text-white/60 mb-3">Record rents, any lease changes, and expenses — then tap <b>Done &amp; send</b>.</p>
-
-                        {/* Rents to record */}
-                        <div className="mb-3">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">💰 Rents to record {unpaidProps.length > 0 && `(${unpaidProps.length})`}</div>
-                          {unpaidProps.length === 0 ? (
-                            <div className="text-sm text-emerald-400/90">All rents recorded for {now.toLocaleString('en-US', { month: 'long' })} ✓</div>
-                          ) : unpaidProps.map(p => (
-                            <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                              <span className="text-sm text-white/85">{p.emoji || '🏠'} {p.name} <span className="text-white/45">· {formatCurrency(parseFloat(p.monthlyRent) || 0)}</span></span>
-                              <button
-                                onClick={() => setShowAddRentModal({ propertyId: p.id, propertyName: p.name, amount: parseFloat(p.monthlyRent) || '', month: currentMonth, datePaid: todayStr, status: 'paid', incomeType: 'rent' })}
-                                className="px-3 py-1 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold">Record</button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Lease + expense quick actions */}
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          <button onClick={() => setShowTenantModal({ _pickProperty: true })}
-                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">📝 Update a lease</button>
-                          <button onClick={() => setShowAddExpenseModal('create')}
-                            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">🧾 Add expense</button>
-                        </div>
-
-                        {/* Action item: update rents in Avail */}
-                        <button onClick={() => setAvailChecked(v => !v)}
-                          className="w-full flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-left">
-                          <span className={`flex-shrink-0 w-5 h-5 rounded-md border flex items-center justify-center text-xs ${availChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-white/30 text-transparent'}`}>✓</span>
-                          <span className="text-sm text-white/85">🔑 Update rent payments in <b>Avail</b></span>
-                        </button>
-
-                        {/* This week's to-dos (shared tasks) */}
-                        <div className="mb-3">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">✅ This week's to-dos {pendingTasks.length > 0 && `(${pendingTasks.length})`}</div>
-                          {pendingTasks.length === 0 ? (
-                            <div className="text-sm text-white/50">No open to-dos.</div>
-                          ) : pendingTasks.slice(0, 8).map(t => (
-                            <div key={t.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                              <span className="text-sm text-white/85 min-w-0 truncate pr-2">{t.title}{t.dueDate ? <span className="text-white/40"> · due {t.dueDate}</span> : null}</span>
-                              <button onClick={() => completeTask(t.id)}
-                                className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-emerald-500/80 text-white text-xs font-semibold">Done</button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Notes — anything to share with the other person this week */}
-                        {(() => {
-                          const weekAgoIso = new Date(Date.now() - 7 * 86400000).toISOString();
-                          const notesThisWeek = weeklyNotes.filter(n => n.at >= weekAgoIso).length;
-                          const visibleNotes = showAllNotes ? weeklyNotes : weeklyNotes.slice(0, 5);
-                          return (
-                            <div className="mb-3">
-                              <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-1">
-                                📝 Notes {notesThisWeek > 0 && `(${notesThisWeek} this week)`}
-                              </div>
-                              <div className="flex gap-2 mb-2">
-                                <textarea
-                                  value={noteDraft}
-                                  onChange={e => setNoteDraft(e.target.value)}
-                                  rows={2}
-                                  placeholder={currentUser === 'Mike'
-                                    ? 'Leave a note for Liam — anything he should know this week…'
-                                    : 'Anything Mike should know? Tenant calls, repairs, questions…'}
-                                  className="flex-1 bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
-                                />
-                                <button onClick={addWeeklyNote} disabled={!noteDraft.trim()}
-                                  className="self-end px-3 py-2 rounded-xl bg-indigo-500/90 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-default text-white text-sm font-semibold">
-                                  Add
-                                </button>
-                              </div>
-                              {visibleNotes.length === 0 ? (
-                                <div className="text-sm text-white/40">No notes yet — anything you type here is saved for both of you.</div>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {visibleNotes.map(n => (
-                                    <div key={n.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-white/[0.06] border border-white/10">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-white/85 whitespace-pre-wrap break-words">{n.text}</p>
-                                        <p className="text-[11px] text-white/35 mt-0.5">
-                                          {n.by} · {new Date(n.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                        </p>
-                                      </div>
-                                      {(n.by === currentUser || currentUser === 'Mike') && (
-                                        <button onClick={() => deleteWeeklyNote(n.id)} title="Delete note"
-                                          className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/10">✕</button>
-                                      )}
-                                    </div>
-                                  ))}
-                                  {weeklyNotes.length > 5 && (
-                                    <button onClick={() => setShowAllNotes(v => !v)} className="text-xs text-indigo-300 hover:text-indigo-200 font-medium">
-                                      {showAllNotes ? 'Show fewer' : `Show all ${weeklyNotes.length} notes`}
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {pushState !== 'granted' && (
-                          <button onClick={enableAlerts} className="w-full mb-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-sm font-semibold hover:bg-amber-500/25">🔔 Enable weekly reminders on this device</button>
-                        )}
-                        {weeklySentAt
-                          ? <div className="text-center text-sm text-emerald-400 font-semibold py-1">✓ Sent — Mike will be notified to pay you.</div>
-                          : <button onClick={sendDone} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:opacity-90 text-white font-bold">✅ Done &amp; send</button>}
                       </div>
                     );
                   })()}
