@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test:api": "node --no-experimental-require-module --test tests/api-runtime.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -30,5 +31,10 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "vite": "^5.0.8"
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "5.10.0"
+    }
   }
 }
