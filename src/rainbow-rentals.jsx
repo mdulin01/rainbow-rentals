@@ -1697,7 +1697,7 @@ export default function RainbowRentals() {
                   }}
                   onImportTenants={(items) => {
                     items.forEach(({ propertyId, tenant }) => addOrUpdateTenant(propertyId, tenant));
-                    showToast(`${items.length} tenant${items.length === 1 ? '' : 's'} added`, 'success');
+                    showToast(`${items.length} tenant${items.length === 1 ? '' : 's'} updated`, 'success');
                   }}
                   onEditTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));

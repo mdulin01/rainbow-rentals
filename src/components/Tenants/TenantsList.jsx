@@ -136,8 +136,10 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                     const rows = parsePasted(pasteText);
                     setPreview(rows.map(r => {
                       const prop = matchProperty(r.address, properties);
-                      const exists = prop ? allTenants.some(t => String(t.propertyId) === String(prop.id) && (normalizePhone(t.phone) === normalizePhone(r.phone) || (t.name || '').toLowerCase() === r.name.toLowerCase())) : false;
-                      return { ...r, propertyId: prop ? String(prop.id) : '', exists };
+                      const existing = prop ? allTenants.find(t => String(t.propertyId) === String(prop.id) && ((r.phone && normalizePhone(t.phone) === normalizePhone(r.phone)) || (t.name || '').toLowerCase() === r.name.toLowerCase())) : null;
+                      // Already listed with a phone → skip. Listed without one → add the phone. Otherwise → new tenant.
+                      const action = !existing ? 'add' : (normalizePhone(existing.phone) ? 'skip' : 'update');
+                      return { ...r, propertyId: prop ? String(prop.id) : '', existing, action };
                     }));
                   }} disabled={!pasteText.trim()}
                     className="flex-1 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition">Preview</button>
@@ -149,9 +151,12 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                 {preview.length === 0 && <p className="text-sm text-white/50">Nothing I could read. Each line needs at least a name and a phone or address.</p>}
                 <div className="space-y-2">
                   {preview.map((r, i) => (
-                    <div key={i} className={`grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr] gap-2 items-center rounded-xl px-3 py-2 ${r.exists ? 'bg-white/[0.03] opacity-60' : 'bg-white/[0.05]'}`}>
+                    <div key={i} className={`grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr] gap-2 items-center rounded-xl px-3 py-2 ${r.action === 'skip' ? 'bg-white/[0.03] opacity-60' : 'bg-white/[0.05]'}`}>
                       <div className="min-w-0"><p className="text-sm text-white truncate">{r.name}</p><p className="text-[11px] text-white/40 truncate">{r.address || 'no address'}</p></div>
-                      <p className="text-xs text-white/70">{r.phone || <span className="text-orange-300">no phone</span>}{r.exists && <span className="text-white/40"> · already listed, skipped</span>}</p>
+                      <p className="text-xs text-white/70">{r.phone || <span className="text-orange-300">no phone</span>}
+                        {r.action === 'skip' && <span className="text-white/40"> · already listed, skipped</span>}
+                        {r.action === 'update' && <span className="text-teal-300"> · adds phone to existing</span>}
+                        {r.action === 'add' && <span className="text-emerald-300"> · new</span>}</p>
                       <select value={r.propertyId} onChange={e => setPreview(pv => pv.map((x, j) => j === i ? { ...x, propertyId: e.target.value } : x))}
                         className="w-full px-2 py-1.5 bg-white/[0.05] border border-white/[0.08] rounded-lg text-xs text-white focus:outline-none focus:border-teal-500/50">
                         <option value="" className="bg-slate-800">— skip (no property match) —</option>
@@ -162,7 +167,12 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                 </div>
                 <div className="flex gap-2 mt-4">
                   <button onClick={() => {
-                    const items = preview.filter(r => r.propertyId && !r.exists).map(r => {
+                    const items = preview.filter(r => r.propertyId && r.action !== 'skip').map(r => {
+                      if (r.action === 'update') {
+                        // Keep everything on the existing record; only fill the phone (and allow texting).
+                        const { propertyId: _p, propertyName: _n, propertyEmoji: _e, ...rest } = r.existing;
+                        return { propertyId: r.propertyId, tenant: { ...rest, phone: r.phone, smsOk: true } };
+                      }
                       const parts = r.name.trim().split(/\s+/);
                       return { propertyId: r.propertyId, tenant: {
                         name: r.name.trim(), firstName: parts[0] || '', lastName: parts.slice(1).join(' '),
@@ -171,9 +181,9 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                     });
                     onImportTenants(items);
                     setShowImport(false); setPasteText(''); setPreview(null);
-                  }} disabled={!preview.some(r => r.propertyId && !r.exists)}
+                  }} disabled={!preview.some(r => r.propertyId && r.action !== 'skip')}
                     className="flex-1 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition">
-                    Add {preview.filter(r => r.propertyId && !r.exists).length} tenant{preview.filter(r => r.propertyId && !r.exists).length === 1 ? '' : 's'}
+                    Apply to {preview.filter(r => r.propertyId && r.action !== 'skip').length} tenant{preview.filter(r => r.propertyId && r.action !== 'skip').length === 1 ? '' : 's'}
                   </button>
                   <button onClick={() => setPreview(null)} className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm transition">Back</button>
                 </div>
