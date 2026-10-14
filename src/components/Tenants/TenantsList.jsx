@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X, Trash2 } from 'lucide-react';
 import { normalizePhone } from '../../utils';
 import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty } from '../../rentLogic.js';
 import { tenantStatuses } from '../../constants';
 import { formatDate, formatCurrency, getDaysUntil } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
-export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, canManage = true }) {
+export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, onDeleteTenant, canManage = true }) {
   const [showImport, setShowImport] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [preview, setPreview] = useState(null); // [{ name, phone, address, propertyId, exists }]
@@ -323,6 +323,12 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                             <a href={`tel:${tenant.phone}`} onClick={e => e.stopPropagation()} className="text-white/40 hover:text-white/70">
                               <Phone className="w-4 h-4" />
                             </a>
+                          )}
+                          {canManage && onDeleteTenant && (
+                            <button onClick={e => { e.stopPropagation(); onDeleteTenant(tenant.propertyId, tenant); }}
+                              className="ml-auto text-white/25 hover:text-red-400" title={`Remove ${tenant.name}`}>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
                       </td>

@@ -1687,6 +1687,14 @@ export default function RainbowRentals() {
                 <TenantsList
                   properties={properties}
                   canManage={canManage}
+                  onDeleteTenant={(propertyId, tenant) => {
+                    const prop = properties.find(p => String(p.id) === String(propertyId));
+                    setConfirmDialog({
+                      title: 'Remove tenant',
+                      message: `Remove ${tenant.name} from ${prop?.name || 'this property'}? Their rent history stays; only the tenant record goes.`,
+                      onConfirm: () => { removeTenant(propertyId, tenant.id); setConfirmDialog(null); showToast(`${tenant.name} removed`, 'info'); },
+                    });
+                  }}
                   onImportTenants={(items) => {
                     items.forEach(({ propertyId, tenant }) => addOrUpdateTenant(propertyId, tenant));
                     showToast(`${items.length} tenant${items.length === 1 ? '' : 's'} added`, 'success');
