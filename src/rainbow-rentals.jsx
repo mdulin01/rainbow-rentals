@@ -47,6 +47,8 @@ import TenantsList from './components/Tenants/TenantsList';
 // Rent components
 import RentLedger from './components/Rent/RentLedger';
 import AddRentPaymentModal from './components/Rent/AddRentPaymentModal';
+import RentDay from './components/Tenants/RentDay';
+import ReminderComposer from './components/Tenants/ReminderComposer';
 import RentReconciliation from './components/Rent/RentReconciliation';
 
 // Expenses components
@@ -66,7 +68,7 @@ import FinancialSummary from './components/Financials/FinancialSummary';
 
 // Hooks
 import { useSharedHub } from './hooks/useSharedHub';
-import { useProperties, getPropertyTenants } from './hooks/useProperties';
+import { useProperties, getPropertyTenants, getLeaseTerms } from './hooks/useProperties';
 import { useDocuments } from './hooks/useDocuments';
 import { useFinancials } from './hooks/useFinancials';
 import { useRent } from './hooks/useRent';
@@ -280,6 +282,36 @@ export default function RainbowRentals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ========== TENANT COMMS (Rent Day) ==========
+  // rentalData/comms — { settings: { payInstructions, fromName, dueDay, graceDays, lateFee },
+  // log: [...] } — every reminder/text/email/call/note logged by either operator (capped 500,
+  // newest first) so "did anyone nudge them yet?" has an answer.
+  const [commsSettings, setCommsSettings] = useState({});
+  const [commsLog, setCommsLog] = useState([]);
+  const [showReminder, setShowReminder] = useState(null); // { property, tenant, monthKey, templateId, ... }
+  const [tenantsView, setTenantsView] = useState('rentday'); // 'rentday' | 'list'
+  const commsLogRef = useRef([]);
+  useEffect(() => { commsLogRef.current = commsLog; }, [commsLog]);
+
+  const logComm = useCallback(async (entry) => {
+    if (!user) return;
+    const next = [entry, ...commsLogRef.current].slice(0, 500);
+    setCommsLog(next);
+    try {
+      await setDoc(doc(db, 'rentalData', 'comms'), JSON.parse(JSON.stringify({ log: next, lastUpdated: entry.at })), { merge: true });
+    } catch (e) { console.error('comms save:', e); showToast && showToast('Message not logged — ' + e.message, 'error'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const saveCommsSettings = useCallback(async (settings) => {
+    setCommsSettings(settings);
+    try {
+      await setDoc(doc(db, 'rentalData', 'comms'), JSON.parse(JSON.stringify({ settings, lastUpdated: new Date().toISOString() })), { merge: true });
+      showToast && showToast('Reminder settings saved', 'success');
+    } catch (e) { console.error('comms settings save:', e); showToast && showToast('Not saved — ' + e.message, 'error'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ========== ACTIVITY LOG + SOFT-DELETE (trash) ==========
   // rentalData/activity — append-only who/what/when (capped 300); powers the
   // "This week" digest and gives the two-operator setup an audit trail.
@@ -351,8 +383,8 @@ export default function RainbowRentals() {
     exportedAt: new Date().toISOString(), exportedBy: currentUser || 'unknown',
     properties: _allProperties, rentPayments: _allRent, expenses: _allExpenses,
     transactions: _allTxns, documentsIndex: _allDocuments.map(({ fileData, ...meta }) => meta),
-    investors, sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas,
-  }), [currentUser, _allProperties, _allRent, _allExpenses, _allTxns, _allDocuments, investors, _allTasks, _allLists, sharedIdeas]);
+    investors, sharedTasks: _allTasks, sharedLists: _allLists, sharedIdeas, commsLog, commsSettings,
+  }), [currentUser, _allProperties, _allRent, _allExpenses, _allTxns, _allDocuments, investors, _allTasks, _allLists, sharedIdeas, commsLog, commsSettings]);
 
   const exportAllData = useCallback(() => {
     const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: 'application/json' });
@@ -402,6 +434,7 @@ export default function RainbowRentals() {
     try {
       const p = new URLSearchParams(window.location.search);
       if (p.get('section') === 'analysis') { setActiveSection('rentals'); setPropertyViewMode('overview'); window.history.replaceState({}, '', window.location.pathname); }
+      if (p.get('section') === 'rentday') { setActiveSection('tenants'); setTenantsView('rentday'); window.history.replaceState({}, '', window.location.pathname); }
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -714,7 +747,10 @@ export default function RainbowRentals() {
     const u3 = onSnapshot(doc(db, 'rentalData', 'weeklyNotes'),
       (snap) => { if (snap.exists()) setWeeklyNotes(snap.data().notes || []); },
       (e) => console.error('weeklyNotes load:', e));
-    return () => { u1(); u2(); u3(); };
+    const u4 = onSnapshot(doc(db, 'rentalData', 'comms'),
+      (snap) => { if (snap.exists()) { const d = snap.data(); setCommsLog(d.log || []); setCommsSettings(d.settings || {}); } },
+      (e) => console.error('comms load:', e));
+    return () => { u1(); u2(); u3(); u4(); };
   }, [user]);
 
   const resolveReviewItem = async (itemId, patch) => {
@@ -957,7 +993,7 @@ export default function RainbowRentals() {
   const anyModalOpen = showAddTaskModal || showSharedListModal || showAddIdeaModal ||
     showNewPropertyModal || showTenantModal || showAddDocumentModal || showAddTransactionModal ||
     showAddRentModal || showAddExpenseModal || viewingDocument || selectedProperty ||
-    showChecklistInitModal || showChecklistDetailModal || showInvestorModal;
+    showChecklistInitModal || showChecklistDetailModal || showInvestorModal || showReminder;
 
   // Mobile section dropdown
   const allSections = [
@@ -1660,7 +1696,30 @@ export default function RainbowRentals() {
               )}
 
               {/* ========== TENANTS SECTION ========== */}
-              {activeSection === 'tenants' && (
+              {activeSection === 'tenants' && canManage && (
+                <div className="flex gap-1.5 mb-4">
+                  {[{ id: 'rentday', label: '📣 Rent Day' }, { id: 'list', label: '👤 All Tenants' }].map(v => (
+                    <button key={v.id} onClick={() => setTenantsView(v.id)}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium transition ${tenantsView === v.id ? 'bg-teal-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {activeSection === 'tenants' && canManage && tenantsView === 'rentday' && (
+                <RentDay
+                  properties={properties}
+                  rentPayments={rentPayments}
+                  commsLog={commsLog}
+                  settings={commsSettings}
+                  currentUser={currentUser}
+                  canManage={canManage}
+                  onSaveSettings={saveCommsSettings}
+                  onCompose={(target) => setShowReminder(target)}
+                  onRecord={(prefill) => setShowAddRentModal(prefill)}
+                />
+              )}
+              {activeSection === 'tenants' && (!canManage || tenantsView === 'list') && (
                 <TenantsList
                   properties={properties}
                   onEditTenant={(propertyId, tenant) => {
@@ -1781,7 +1840,8 @@ export default function RainbowRentals() {
                             && ['paid', 'partial', 'late'].includes(r.status)
                             && (r.month || r.datePaid || '').startsWith(monthKey));
                         if (monthRecords.length === 0) {
-                          const isPastDue = m < currentMonthIdx || dayOfMonth > 5;
+                          const terms = getLeaseTerms(p, commsSettings);
+                          const isPastDue = m < currentMonthIdx || dayOfMonth > terms.dueDay - 1 + terms.graceDays;
                           flags.push({ property: p, monthIdx: m, monthKey, isPastDue });
                         }
                       });
@@ -1813,6 +1873,21 @@ export default function RainbowRentals() {
                             <span className={`text-sm font-bold ${f.isPastDue ? 'text-red-400' : 'text-yellow-400'}`}>
                               {formatCurrency(parseFloat(f.property.monthlyRent) || 0)}
                             </span>
+                            {canManage && (() => {
+                              const t = getPropertyTenants(f.property).find(x => x.phone && x.smsOk !== false && x.status !== 'vacant');
+                              return t ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowReminder({ property: f.property, tenant: t, monthKey: f.monthKey, templateId: f.isPastDue ? 'late' : 'due', amountDue: parseFloat(f.property.monthlyRent) || 0 });
+                                  }}
+                                  className="px-3 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition"
+                                  title={`Text ${t.name}`}
+                                >
+                                  Text
+                                </button>
+                              ) : null;
+                            })()}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2736,6 +2811,17 @@ export default function RainbowRentals() {
         )}
 
         {/* Rent Payment Modal */}
+        {showReminder && (
+          <ReminderComposer
+            target={showReminder}
+            settings={commsSettings}
+            currentUser={currentUser}
+            showToast={showToast}
+            onLog={(entry) => { logComm(entry); logActivity('reminder', `${entry.channel} → ${entry.tenantName} (${entry.propertyName})`); }}
+            onClose={() => setShowReminder(null)}
+          />
+        )}
+
         {showAddRentModal && (
           <AddRentPaymentModal
             payment={typeof showAddRentModal === 'object' ? showAddRentModal : null}

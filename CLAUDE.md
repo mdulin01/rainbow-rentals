@@ -29,7 +29,8 @@
 
 - **Main component:** `src/rainbow-rentals.jsx`
 - **Shared utility:** `src/utils.js`
-- **Key component groups:** Rentals, Expenses, Financials, Rent, Tenants, SharedHub, Documents
+- **Key component groups:** Rentals, Expenses, Financials, Rent, Tenants (TenantsList, RentDay, ReminderComposer), SharedHub, Documents
+- **Tenant comms:** `rentalData/comms` holds reminder settings (Zelle instructions, default due day/grace/late fee) and the message log; reminders go out via `sms:`/`mailto:` links from the operator's own phone (no backend)
 - **Custom hooks:** useDocuments, useExpenses, useFinancials, useProperties, useRent, useSharedHub
 - **Context:** SharedHubContext
 - This project shares a similar structure with `dulinproperties` but they are **completely separate** — separate Firebase projects, separate repos, separate domains, separate Vercel deployments.

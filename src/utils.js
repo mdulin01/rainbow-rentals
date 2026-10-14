@@ -123,3 +123,62 @@ export const getLeaseStatus = (leaseEnd) => {
   if (days <= 90) return { label: `${days}d left`, color: 'text-yellow-400', urgency: 'low' };
   return { label: `${days}d left`, color: 'text-green-400', urgency: 'none' };
 };
+
+// ---- Tenant messaging helpers ----
+
+// Digits only, with a leading country code for US numbers.
+export const normalizePhone = (phone) => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return `+${digits}`;
+};
+
+export const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+
+// sms: link that opens Messages with the text pre-filled. iOS/macOS want "&body=",
+// Android wants "?body=".
+export const buildSmsLink = (phone, body) => {
+  const num = normalizePhone(phone);
+  const sep = isIOS() || /Macintosh/i.test(navigator.userAgent || '') ? '&' : '?';
+  return `sms:${num}${sep}body=${encodeURIComponent(body || '')}`;
+};
+
+export const buildMailtoLink = (email, subject, body) =>
+  `mailto:${email}?subject=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body || '')}`;
+
+// "2026-10" → "October"
+export const monthName = (monthKey) => {
+  if (!monthKey) return '';
+  const [y, m] = monthKey.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' });
+};
+
+// Current month key, local time.
+export const currentMonthKey = () => todayLocalStr().slice(0, 7);
+
+// YYYY-MM-DD of the rent due date for a month, clamped to the month's last day.
+export const rentDueDateStr = (monthKey, dueDay = 1) => {
+  const [y, m] = monthKey.split('-').map(Number);
+  const maxDay = new Date(y, m, 0).getDate();
+  const day = Math.min(Math.max(parseInt(dueDay, 10) || 1, 1), maxDay);
+  return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+// Fill {placeholders} in a reminder template.
+export const fillTemplate = (text, vars) =>
+  String(text || '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? '')).replace(/\s{2,}/g, ' ').trim();
+
+// "3d ago" / "today" / "2w ago"
+export const timeAgo = (iso) => {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (isNaN(ms)) return '';
+  const d = Math.floor(ms / 86400000);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 14) return `${d}d ago`;
+  if (d < 60) return `${Math.floor(d / 7)}w ago`;
+  return `${Math.floor(d / 30)}mo ago`;
+};

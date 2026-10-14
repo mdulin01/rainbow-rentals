@@ -236,3 +236,22 @@ export const propertyColors = [
   'from-cyan-400 to-blue-500',
   'from-green-400 to-emerald-500',
 ];
+
+// How a tenant pays rent (recorded on each payment; preferred channel on the tenant)
+export const paymentMethods = ['Zelle', 'Avail', 'Money order', 'Check', 'Cash', 'Other'];
+
+// Rent reminder templates. Placeholders: {first} {amount} {property} {month} {dueDate}
+// {balance} {lateFeeLine} {payInstructions} {from}
+export const reminderTemplates = [
+  { id: 'upcoming', label: 'Upcoming', emoji: '📅',
+    text: 'Hi {first}, friendly reminder that {month} rent of {amount} for {property} is due {dueDate}. {payInstructions}Thanks! – {from}' },
+  { id: 'due', label: 'Due today', emoji: '⏰',
+    text: 'Hi {first}, rent of {amount} for {property} is due today ({dueDate}). {payInstructions}Thanks! – {from}' },
+  { id: 'late', label: 'Past due', emoji: '🚨',
+    text: 'Hi {first}, we have not received {month} rent of {amount} for {property}, which was due {dueDate}. {lateFeeLine}Please send it today and reply to let us know. {payInstructions}– {from}' },
+  { id: 'partial', label: 'Balance', emoji: '➗',
+    text: 'Hi {first}, thanks for your payment toward {month} rent for {property}. There is still a balance of {balance}. {payInstructions}– {from}' },
+  { id: 'receipt', label: 'Thanks', emoji: '✅',
+    text: 'Hi {first}, got your {month} rent of {amount} for {property} – thank you! – {from}' },
+  { id: 'custom', label: 'Custom', emoji: '✏️', text: 'Hi {first}, ' },
+];

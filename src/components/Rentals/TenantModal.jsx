@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image, Loader } from 'lucide-react';
-import { tenantStatuses } from '../../constants';
+import { tenantStatuses, paymentMethods } from '../../constants';
 
 const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUploadPhoto }) => {
   // If property has no id (e.g. _pickProperty mode), show property picker
@@ -21,6 +21,11 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
     securityDeposit: '',
     status: 'pending',
     licensePhotoUrl: '',
+    rentDueDay: '',
+    graceDays: '',
+    lateFee: '',
+    preferredPayment: '',
+    smsOk: true,
   });
 
   const [uploadingLicense, setUploadingLicense] = useState(false);
@@ -47,6 +52,11 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
         securityDeposit: tenant.securityDeposit || '',
         status: tenant.status || 'pending',
         licensePhotoUrl: tenant.licensePhotoUrl || '',
+        rentDueDay: tenant.rentDueDay || '',
+        graceDays: tenant.graceDays ?? '',
+        lateFee: tenant.lateFee || '',
+        preferredPayment: tenant.preferredPayment || '',
+        smsOk: tenant.smsOk !== false,
       });
     } else {
       resetForm();
@@ -69,6 +79,11 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
       securityDeposit: '',
       status: 'pending',
       licensePhotoUrl: '',
+      rentDueDay: '',
+      graceDays: '',
+      lateFee: '',
+      preferredPayment: '',
+      smsOk: true,
     });
   };
 
@@ -325,6 +340,70 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
                   className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Rent Terms & Contact — drives Rent Day reminders */}
+          <div>
+            <h3 className="text-white font-semibold mb-1">Rent Terms &amp; Contact</h3>
+            <p className="text-xs text-slate-500 mb-4">Used by Rent Day reminders. Leave blank to use the app defaults (due on the 1st, 5-day grace).</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Rent due day</label>
+                <input
+                  type="number" min="1" max="28"
+                  name="rentDueDay"
+                  value={formData.rentDueDay}
+                  onChange={handleChange}
+                  placeholder="1"
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Grace days</label>
+                <input
+                  type="number" min="0" max="28"
+                  name="graceDays"
+                  value={formData.graceDays}
+                  onChange={handleChange}
+                  placeholder="5"
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Late fee ($)</label>
+                <input
+                  type="number" step="0.01"
+                  name="lateFee"
+                  value={formData.lateFee}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-white/30 transition"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-slate-400 text-sm mb-2">Preferred payment</label>
+                <select
+                  name="preferredPayment"
+                  value={formData.preferredPayment}
+                  onChange={handleChange}
+                  className="w-full bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30 transition"
+                >
+                  <option value="" className="bg-slate-800">Not set</option>
+                  {paymentMethods.map(m => <option key={m} value={m} className="bg-slate-800">{m}</option>)}
+                </select>
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer md:mt-8">
+                <input
+                  type="checkbox"
+                  checked={formData.smsOk}
+                  onChange={e => setFormData(prev => ({ ...prev, smsOk: e.target.checked }))}
+                  className="w-5 h-5 rounded accent-emerald-500"
+                />
+                <span className="text-slate-300 text-sm">OK to text this tenant about rent</span>
+              </label>
             </div>
           </div>
         </div>

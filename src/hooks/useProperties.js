@@ -13,6 +13,23 @@ export const getPropertyTenants = (property) => {
 };
 
 /**
+ * Lease terms for a property: rent due day, grace period, late fee. Stored on the
+ * tenant (the lease), so take the first active tenant that has any set; fall back
+ * to the app-wide defaults in `defaults` (from rentalData/comms settings).
+ */
+export const getLeaseTerms = (property, defaults = {}) => {
+  const tenants = getPropertyTenants(property);
+  const active = tenants.filter(t => !t.status || ['active', 'notice', 'pending'].includes(t.status));
+  const src = [...active, ...tenants].find(t => t.rentDueDay || t.graceDays || t.lateFee) || {};
+  const num = (v, d) => { const n = parseFloat(v); return isNaN(n) ? d : n; };
+  return {
+    dueDay: Math.min(Math.max(parseInt(src.rentDueDay || defaults.dueDay || 1, 10) || 1, 1), 28),
+    graceDays: Math.max(parseInt(src.graceDays ?? defaults.graceDays ?? 5, 10) || 0, 0),
+    lateFee: num(src.lateFee, num(defaults.lateFee, 0)),
+  };
+};
+
+/**
  * useProperties Hook
  * Manages all Properties data and operations in one place
  * Supports multiple tenants per property via property.tenants array.
