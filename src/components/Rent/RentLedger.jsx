@@ -3,7 +3,7 @@ import { Search, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
 import { formatDate, formatCurrency, currentMonthKey, todayLocalStr, monthName } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
-import { computeRentRows } from '../../rentLogic.js';
+import { computeRentRows, cashReceivedInMonth } from '../../rentLogic.js';
 
 export default function RentLedger({ rentPayments, properties, onAdd, onEdit, onDelete, showToast }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,9 +109,7 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
   const collected = monthRows.reduce((s, r) => s + Math.min(r.paid, r.due), 0);
   const outstanding = monthRows.reduce((s, r) => s + r.balance, 0);
   const lateNow = monthRows.filter(r => r.status !== 'paid' && r.phase === 'late').length; // same rule as Rent Day
-  const receivedThisMonth = rentPayments
-    .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.datePaid || '').startsWith(monthKey))
-    .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const receivedThisMonth = cashReceivedInMonth({ rentPayments, monthKey }); // same function as the Rent grid
 
   return (
     <div>
@@ -148,12 +146,12 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
           <p className="text-xl font-bold text-orange-400">{lateNow} <span className="text-xs font-normal text-white/40">household{lateNow === 1 ? '' : 's'}</span></p>
         </div>
         <div className="bg-sky-500/[0.07] border border-sky-400/20 rounded-2xl p-3">
-          <p className="text-sky-200/60 text-xs mb-1">Received in {monthLabel}</p>
+          <p className="text-sky-200/60 text-xs mb-1">Rent received in {monthLabel}</p>
           <p className="text-xl font-bold text-sky-300">{formatCurrency(receivedThisMonth)}</p>
         </div>
       </div>
       <p className="text-[11px] text-white/30 mb-4">
-        Rent due / collected / outstanding / late count by the month a payment is <em>for</em> (same as Home). <span className="text-sky-200/60">Received</span> counts cash by the date it was paid, including catch-up payments for earlier months.
+        Rent due / collected / outstanding / late count by the month a payment is <em>for</em> (same as Home). <span className="text-sky-200/60">Rent received</span> counts rent cash by the date it was paid, including catch-up payments for earlier months (late fees and other income excluded).
       </p>
 
       {/* Filters */}
@@ -237,7 +235,7 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
                     onClick={() => onEdit(payment)}
                   >
                     <td className="px-4 py-3">
-                      <span className="text-sm font-medium text-white">{payment.datePaid ? formatDate(payment.datePaid) : '—'}</span>
+                      <span className={`text-sm font-medium ${payment.datePaid ? 'text-white' : 'text-amber-300/80'}`}>{payment.datePaid ? formatDate(payment.datePaid) : 'No date'}</span>
                     </td>
                     <td className="px-4 py-3">
                       {(() => {
@@ -250,7 +248,7 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
                       })()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-white/70">{payment.propertyName || payment.description || '—'}</span>
+                      <span className="text-sm text-white/70">{(payment.propertyId && properties.some(p => String(p.id) === String(payment.propertyId))) ? getPropertyName(payment.propertyId) : (payment.propertyName || payment.description || '—')}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-medium text-emerald-400">{formatCurrency(payment.amount || 0)}</span>

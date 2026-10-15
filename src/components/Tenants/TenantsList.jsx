@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronDown, ChevronUp, Phone, Mail, ClipboardPaste, X, Trash2, MessageSquare, Link2 } from 'lucide-react';
 import { normalizePhone } from '../../utils';
-import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty, leaseState, tenantRent, getPropertyTenants as propTenants } from '../../rentLogic.js';
+import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty, leaseState, tenantRent, getPropertyTenants as propTenants, rentProperties } from '../../rentLogic.js';
 import { tenantStatuses } from '../../constants';
 import { formatDate, formatCurrency } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
@@ -15,6 +15,8 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortCol, setSortCol] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
+
+  const vacantRent = useMemo(() => properties.filter(p => !rentProperties([p]).length).reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0), [properties]);
 
   // Flatten tenants from all properties (supports multi-tenant)
   const allTenants = useMemo(() => {
@@ -237,8 +239,9 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
           <p className="text-xl font-bold text-red-400">{vacantCount}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Monthly Rent</p>
-          <p className="text-xl font-bold text-emerald-400">{formatCurrency(properties.reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0))}</p>
+          <p className="text-white/40 text-xs mb-1">Rent roll (occupied)</p>
+          <p className="text-xl font-bold text-emerald-400">{formatCurrency(rentProperties(properties).reduce((sum, p) => sum + (parseFloat(p.monthlyRent) || 0), 0))}</p>
+          {vacantRent > 0 && <p className="text-[11px] text-white/30">+ {formatCurrency(vacantRent)} market rent on vacant units</p>}
         </div>
       </div>
 
@@ -299,7 +302,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                       <td className="px-4 py-3">{getStatusBadge(tenant.status)}</td>
                       <td className="px-4 py-3">
                         {(() => {
-                          const st = leaseState(tenant);
+                          const st = leaseState(tenant, undefined, properties.find(p => String(p.id) === String(tenant.propertyId)));
                           if (st.kind === 'month-to-month') {
                             return (
                               <div>
@@ -321,6 +324,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                         <span className="text-sm font-medium text-emerald-400">
                           {tenant.rentDisplay ? formatCurrency(tenant.rentDisplay) : '—'}
                         </span>
+                        {!parseFloat(tenant.monthlyRent) && tenant.rentDisplay ? <span className="block text-[10px] text-white/30" title="No individual share entered; this is the property's rent">property rent</span> : null}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-white/60">
@@ -335,7 +339,7 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                             </a>
                           )}
                           {tenant.phone && (
-                            <a href={`tel:${tenant.phone}`} onClick={e => e.stopPropagation()} className="text-white/40 hover:text-white/70">
+                            <a href={`tel:${tenant.phone}`} onClick={e => e.stopPropagation()} className="text-white/40 hover:text-white/70" aria-label={`Call ${tenant.name}`} title={`Call ${tenant.name}`}>
                               <Phone className="w-4 h-4" />
                             </a>
                           )}

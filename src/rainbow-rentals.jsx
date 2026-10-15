@@ -96,9 +96,9 @@ const RainbowBar = () => (
 // and the phone dropdown. Deep-link with ?section=<id>.
 const SECTIONS = [
   { id: 'action-items', label: 'Home', short: 'Home', emoji: '✅', dock: true, gradient: 'from-indigo-400 to-purple-500' },
-  { id: 'rentals', label: 'Properties', short: 'Props', emoji: '🏠', dock: true, gradient: 'from-teal-400 to-cyan-500' },
+  { id: 'rentals', label: 'Properties', short: 'Properties', emoji: '🏠', dock: true, gradient: 'from-teal-400 to-cyan-500' },
   { id: 'tenants', label: 'Tenants', short: 'Tenants', emoji: '👤', dock: true, gradient: 'from-blue-400 to-indigo-500' },
-  { id: 'expenses', label: 'Expenses', short: 'Costs', emoji: '💸', dock: true, gradient: 'from-red-400 to-rose-500' },
+  { id: 'expenses', label: 'Expenses', short: 'Expenses', emoji: '💸', dock: true, gradient: 'from-red-400 to-rose-500' },
   { id: 'money', label: 'Money', short: 'Money', emoji: '💰', dock: true, gradient: 'from-emerald-400 to-green-500' },
   { id: 'ownership', label: 'Ownership', short: 'Own', emoji: '🤝', dock: false, gradient: 'from-amber-400 to-yellow-500' },
   { id: 'documents', label: 'Documents', short: 'Docs', emoji: '📄', dock: false, gradient: 'from-amber-400 to-orange-500' },
@@ -326,9 +326,11 @@ export default function RainbowRentals() {
   // is minted the first time we text them and saved on the tenant record.
   const ensurePortalToken = (property, tenant) => {
     if (!tenant || tenant.portalToken || !canManage) return tenant;
-    const next = { ...tenant, portalToken: newPortalToken() };
+    // TenantsList rows carry display-only fields; strip them so they don't land in Firestore.
+    const { propertyId: _pid, propertyName: _pn, propertyEmoji: _pe, rentDisplay: _rd, ...clean } = tenant;
+    const next = { ...clean, portalToken: newPortalToken() };
     _addOrUpdateTenant(property.id, next);
-    return next;
+    return { ...tenant, portalToken: next.portalToken };
   };
   const openReminder = (target) => {
     if (target?.property && target?.tenant) target = { ...target, tenant: ensurePortalToken(target.property, target.tenant) };
@@ -910,6 +912,17 @@ export default function RainbowRentals() {
     return prop ? prop.name : null;
   };
 
+  // Any modal open → hide the phone dock and lock page scroll behind the sheet.
+  const anyModalOpen = !!(showAddTaskModal || showSharedListModal || showAddIdeaModal ||
+    showNewPropertyModal || showTenantModal || showAddDocumentModal ||
+    showAddRentModal || showAddExpenseModal || viewingDocument || selectedProperty ||
+    showChecklistInitModal || showChecklistDetailModal || showInvestorModal || showReminder);
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = anyModalOpen && !selectedProperty ? 'hidden' : '';
+    return () => { document.body.style.overflow = prev; };
+  }, [anyModalOpen, selectedProperty]);
+
   // ========== RENDER ==========
 
   // Loading state
@@ -940,12 +953,6 @@ export default function RainbowRentals() {
       </div>
     );
   }
-
-  // Check if any modal is open (to hide nav)
-  const anyModalOpen = showAddTaskModal || showSharedListModal || showAddIdeaModal ||
-    showNewPropertyModal || showTenantModal || showAddDocumentModal ||
-    showAddRentModal || showAddExpenseModal || viewingDocument || selectedProperty ||
-    showChecklistInitModal || showChecklistDetailModal || showInvestorModal || showReminder;
 
   const activeSectionInfo = SECTIONS.find(sec => sec.id === activeSection) || SECTIONS[0];
 
@@ -1005,34 +1012,37 @@ export default function RainbowRentals() {
                 <div className="w-9 h-9 bg-gradient-to-br from-red-500 via-green-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                   <span className="text-sm font-bold text-white">RR</span>
                 </div>
-                <h1 className="text-lg font-bold text-white leading-tight">Rainbow Rentals</h1>
+                <h1 className="hidden xl:block text-lg font-bold text-white leading-tight">Rainbow Rentals</h1>
               </div>
-              {/* Desktop nav tabs */}
-              <nav className="hidden md:flex items-center gap-1 ml-6">
+              {/* Desktop nav tabs — labels only when there's room (emoji + tooltip below xl) */}
+              <nav className="hidden md:flex items-center gap-1 ml-3 xl:ml-6 min-w-0">
                 {SECTIONS.map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => goTo(tab.id)}
+                    title={tab.label}
+                    aria-label={tab.label}
+                    aria-current={activeSection === tab.id ? 'page' : undefined}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
                       activeSection === tab.id
                         ? 'bg-white/15 text-white'
                         : 'text-white/50 hover:text-white/80 hover:bg-white/[0.06]'
                     }`}
                   >
-                    <span className="mr-1.5">{tab.emoji}</span>{tab.label}
+                    <span className="xl:mr-1.5">{tab.emoji}</span><span className="hidden xl:inline">{tab.label}</span>
                   </button>
                 ))}
               </nav>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowSearch(!showSearch)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
+              <button onClick={() => setShowSearch(!showSearch)} aria-label="Search" title="Search" className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
                 <Search className="w-4 h-4 text-white/60" />
               </button>
               <a href="/help.html" target="_blank" rel="noopener" title="How to use this app"
                 className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
                 <HelpCircle className="w-4 h-4 text-white/60" />
               </a>
-              <button onClick={handleLogout} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
+              <button onClick={handleLogout} aria-label="Sign out" title="Sign out" className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition">
                 <LogOut className="w-4 h-4 text-white/60" />
               </button>
             </div>

@@ -100,7 +100,7 @@ export const useProperties = (currentUser, saveProperties, showToast) => {
     if (matched) {
       showToast('Tenant saved', 'success');
     } else {
-      console.error('addOrUpdateTenant: no property matched id', propertyId);
+      console.error('addOrUpdateTenant: no property matched id', propertyId, 'for tenant', tenantData?.name || tenantData?.id);
       showToast('Error: property not found', 'error');
     }
   }, [showToast]);

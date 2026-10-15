@@ -35,6 +35,58 @@ export const rentProperties = (properties) => properties.filter(p =>
     p.propertyStatus || (getPropertyTenants(p).length > 0 ? 'occupied' : 'vacant')
   ) && (parseFloat(p.monthlyRent) || 0) > 0);
 
+/** Rent-type payment records for a property in a month (by rent month, falling back to date paid). */
+export const rentRecordsFor = (rentPayments, propertyId, monthKey) => rentPayments.filter(r =>
+  String(r.propertyId) === String(propertyId)
+  && (!r.incomeType || r.incomeType === 'rent')
+  && ['paid', 'partial', 'late'].includes(r.status)
+  && (r.month || r.datePaid || '').startsWith(monthKey));
+
+/** Earliest lease start among the current (non-former) tenants, or null. */
+export const householdSince = (property) => {
+  const starts = getPropertyTenants(property).filter(t => t.status !== 'former' && t.leaseStart).map(t => String(t.leaseStart).slice(0, 10)).sort();
+  return starts[0] || null;
+};
+
+/**
+ * What rent to expect from `property` for `monthKey`:
+ *   { expected: number|null, kind: 'normal' | 'prorated' | 'prior' | 'vacant' }
+ * - months before the current household's lease start are 'prior' (a previous tenant's
+ *   history, or vacancy): nothing is expected of today's tenant;
+ * - a lease start with rent collected the month before is a renewal: history runs through;
+ *   otherwise the move-in month is prorated by days;
+ * - a property that isn't collecting rent now is 'vacant' in months with no payment.
+ */
+export const expectedRent = ({ property, monthKey, rentPayments = [] }) => {
+  const rent = parseFloat(property?.monthlyRent) || 0;
+  const collecting = rentProperties([property]).length > 0;
+  const since = householdSince(property);
+  if (!collecting) {
+    return rentRecordsFor(rentPayments, property.id, monthKey).length ? { expected: rent, kind: 'normal' } : { expected: null, kind: 'vacant' };
+  }
+  if (since) {
+    const sinceKey = since.slice(0, 7);
+    // Rent collected the month before the lease start means the same household renewed:
+    // their history runs straight through, nothing is 'prior' and nothing is prorated.
+    const renewal = rentRecordsFor(rentPayments, property.id, shiftMonthKey(sinceKey, -1)).length > 0;
+    if (!renewal) {
+      if (monthKey < sinceKey) return { expected: null, kind: 'prior' };
+      if (monthKey === sinceKey) {
+        const [y, m] = monthKey.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const startDay = parseInt(since.slice(8, 10), 10) || 1;
+        if (startDay > 1) return { expected: Math.round(rent * (daysInMonth - startDay + 1) / daysInMonth * 100) / 100, kind: 'prorated' };
+      }
+    }
+  }
+  return { expected: rent, kind: 'normal' };
+};
+
+/** Cash in the door during `monthKey` (rent records only, by date paid), whatever month it was for. */
+export const cashReceivedInMonth = ({ rentPayments, monthKey }) => rentPayments
+  .filter(r => (!r.incomeType || r.incomeType === 'rent') && ['paid', 'partial', 'late'].includes(r.status) && (r.datePaid || '').startsWith(monthKey))
+  .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
 /**
  * One row per rent property for `monthKey`: paid/partial/unpaid, where we are relative
  * to the due date, and which reminder template fits. `today` is a local YYYY-MM-DD.
@@ -42,11 +94,9 @@ export const rentProperties = (properties) => properties.filter(p =>
 export const computeRentRows = ({ properties, rentPayments, commsLog = [], settings = {}, monthKey, today }) =>
   rentProperties(properties).map(p => {
     const terms = getLeaseTerms(p, settings);
-    const due = parseFloat(p.monthlyRent) || 0;
-    const records = rentPayments.filter(r => String(r.propertyId) === String(p.id)
-      && (!r.incomeType || r.incomeType === 'rent')
-      && ['paid', 'partial', 'late'].includes(r.status)
-      && (r.month || r.datePaid || '').startsWith(monthKey));
+    const exp = expectedRent({ property: p, monthKey, rentPayments });
+    const due = exp.expected ?? 0;
+    const records = rentRecordsFor(rentPayments, p.id, monthKey);
     const paid = records.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
     const settled = records.some(r => r.status === 'paid') || paid >= due - 0.005;
     const status = settled ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
@@ -60,7 +110,7 @@ export const computeRentRows = ({ properties, rentPayments, commsLog = [], setti
       (tenant.id && String(e.tenantId) === String(tenant.id)) ||
       (!tenant.id && e.tenantName && e.tenantName === tenant.name));
     const monthLog = commsLog.filter(e => String(e.propertyId) === String(p.id) && e.month === monthKey);
-    return { property: p, terms, due, paid, balance: Math.max(due - paid, 0), status, dueDate, daysPast, phase, suggested, tenants, records, lastContact, monthLog };
+    return { property: p, terms, due, dueKind: exp.kind, paid, balance: Math.max(due - paid, 0), status, dueDate, daysPast, phase, suggested, tenants, records, lastContact, monthLog };
   }).sort((a, b) => {
     const rank = { unpaid: 0, partial: 1, paid: 2 };
     return rank[a.status] - rank[b.status] || b.daysPast - a.daysPast;
@@ -210,20 +260,13 @@ export const computeAutoRows = ({ properties, rentPayments, commsLog, settings, 
 export const unpaidPriorMonths = ({ properties, rentPayments, monthKey }) => {
   const [y, m] = monthKey.split('-').map(Number);
   const out = [];
-  // Months before the current household moved in are not theirs to owe.
-  const movedIn = (p) => {
-    const starts = getPropertyTenants(p).filter(t => t.status !== 'former' && t.leaseStart).map(t => String(t.leaseStart).slice(0, 7)).sort();
-    return starts[0] || null;
-  };
   for (let mm = 1; mm < m; mm++) {
     const key = `${y}-${String(mm).padStart(2, '0')}`;
     rentProperties(properties).forEach(p => {
-      const since = movedIn(p);
-      if (since && key < since) return;
-      const settled = rentPayments.some(r => String(r.propertyId) === String(p.id)
-        && ['paid', 'partial', 'late'].includes(r.status)
-        && (r.month || r.datePaid || '').startsWith(key));
-      if (!settled) out.push({ property: p, monthKey: key, due: parseFloat(p.monthlyRent) || 0 });
+      const exp = expectedRent({ property: p, monthKey: key, rentPayments });
+      if (exp.expected == null) return; // before this household moved in
+      const settled = rentRecordsFor(rentPayments, p.id, key).length > 0;
+      if (!settled) out.push({ property: p, monthKey: key, due: exp.expected });
     });
   }
   return out;
@@ -263,9 +306,10 @@ export const matchPropertyByAddress = (address, properties) => {
 // ---- Lease state (one implementation for every tab) ----
 // A lease past its end date is month-to-month unless the tenant is marked fixed-term
 // (tenant.leaseType === 'fixed') or explicitly month-to-month from the start.
-export const leaseState = (tenant, today = todayLocalStr()) => {
+export const leaseState = (tenant, today = todayLocalStr(), property = null) => {
   if (!tenant) return { kind: 'none', days: null, label: '', color: 'text-white/30' };
-  if (tenant.leaseType === 'month-to-month') {
+  const propertyMtm = !tenant.leaseType && !tenant.leaseEnd && property?.propertyStatus === 'month-to-month';
+  if (tenant.leaseType === 'month-to-month' || propertyMtm) {
     return { kind: 'month-to-month', days: null, label: tenant.leaseEnd ? `Month-to-month since ${formatDate(tenant.leaseEnd)}` : 'Month-to-month', short: 'MTM', color: 'text-white/50' };
   }
   if (!tenant.leaseEnd) return { kind: 'none', days: null, label: '', color: 'text-white/30' };
@@ -284,7 +328,7 @@ export const leaseAlerts = (properties, today = todayLocalStr()) => {
   const out = [];
   properties.forEach(p => getPropertyTenants(p).forEach(t => {
     if (t.status === 'former') return;
-    const st = leaseState(t, today);
+    const st = leaseState(t, today, p);
     if (st.kind === 'expiring' || st.kind === 'expired') out.push({ property: p, tenant: t, ...st });
   }));
   return out.sort((a, b) => (a.days ?? 0) - (b.days ?? 0));

@@ -267,7 +267,7 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
               {tenants.length > 0 ? (
                 <div className="space-y-4">
                   {tenants.map((tenant, idx) => {
-                    const lease = leaseState(tenant);
+                    const lease = leaseState(tenant, undefined, property);
                     return (
                       <div key={tenant.id || idx} className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
                         <div className="flex items-start justify-between mb-3">

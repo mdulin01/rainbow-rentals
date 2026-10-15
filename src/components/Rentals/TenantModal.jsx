@@ -139,6 +139,8 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
+            title="Close"
             className="p-2 hover:bg-white/10 rounded-lg transition text-slate-400 hover:text-white"
           >
             <X className="w-6 h-6" />

@@ -93,7 +93,7 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
   // Lease countdown
   // Soonest lease that still has a countdown; month-to-month shows as MTM.
   const getLeaseInfo = () => {
-    const states = tenants.filter(t => t.status !== 'former').map(t => ({ t, st: leaseState(t) })).filter(x => x.st.kind !== 'none');
+    const states = tenants.filter(t => t.status !== 'former').map(t => ({ t, st: leaseState(t, undefined, property) })).filter(x => x.st.kind !== 'none');
     if (states.length === 0) return null;
     const ranked = states.sort((a, b) => (a.st.days ?? 9999) - (b.st.days ?? 9999));
     return ranked[0].st;
@@ -191,7 +191,7 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
                 if (activeTenants.length === 0) return null;
                 const t = activeTenants[0];
                 const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
-                const st = leaseState(t);
+                const st = leaseState(t, undefined, property);
                 const text = st.kind === 'month-to-month'
                   ? `Month-to-month${t.leaseStart ? ` · started ${fmt(t.leaseStart)}` : ''}${t.leaseEnd ? ` · term ended ${fmt(t.leaseEnd)}` : ''}`
                   : `Lease: ${fmt(t.leaseStart) || 'start not entered'} – ${fmt(t.leaseEnd) || 'no end date'}`;

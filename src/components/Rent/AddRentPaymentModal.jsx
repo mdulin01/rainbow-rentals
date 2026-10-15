@@ -91,7 +91,7 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
   return (
     <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-slate-800 border border-white/10 rounded-t-3xl md:rounded-3xl p-6 max-h-[85vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-slate-800 border border-white/10 rounded-t-3xl md:rounded-3xl p-6 pb-0 max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">{isEditing ? 'Edit Payment' : 'Record Income'}</h2>
@@ -273,8 +273,8 @@ export default function AddRentPaymentModal({ payment, properties, onSave, onDel
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between mt-6">
+        {/* Footer — sticky so Record is always reachable on a phone */}
+        <div className="flex items-center justify-between mt-6 sticky bottom-0 -mx-6 px-6 py-4 bg-slate-800/95 backdrop-blur border-t border-white/10 rounded-b-3xl md:rounded-b-3xl">
           {isEditing && onDelete ? (
             <button
               onClick={() => onDelete(payment.id)}

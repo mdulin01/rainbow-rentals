@@ -1,4 +1,4 @@
-import { getLeaseTerms } from '../../rentLogic.js';
+import { getLeaseTerms, expectedRent, rentRecordsFor, cashReceivedInMonth } from '../../rentLogic.js';
 import React, { useState, useMemo } from 'react';
 import { formatCurrency } from '../../utils';
 
@@ -21,9 +21,7 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
   const currentYear = now.getFullYear();
   const currentMonthIdx = now.getMonth(); // 0-based
   const curKey = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
-  const recordedThisMonth = rentPayments
-    .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.incomeType === 'rent' || !r.incomeType) && (r.datePaid || r.month || '').startsWith(curKey))
-    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const recordedThisMonth = cashReceivedInMonth({ rentPayments, monthKey: curKey });
   // Bank side: null = no deposits imported for this month (not the same as $0 deposited).
   const bankMonth = incomeActuals && incomeActuals.months && incomeActuals.months[curKey];
   const depositedThisMonth = bankMonth ? (parseFloat(bankMonth.total) || 0) : null;
@@ -31,10 +29,13 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
   const curMonthName = now.toLocaleDateString('en-US', { month: 'long' });
   const [year, setYear] = useState(currentYear);
 
-  // Properties we expect to collect rent on (current status + positive monthly rent).
+  // Rows: properties collecting rent now, plus any property with rent recorded in `year`
+  // (a unit that went vacant mid-year keeps its history).
   const rentProps = useMemo(
-    () => properties.filter(p => RENT_COLLECTING.includes(getEffectiveStatus(p)) && (parseFloat(p.monthlyRent) || 0) > 0),
-    [properties, getEffectiveStatus]
+    () => properties.filter(p =>
+      (RENT_COLLECTING.includes(getEffectiveStatus(p)) && (parseFloat(p.monthlyRent) || 0) > 0)
+      || rentPayments.some(r => String(r.propertyId) === String(p.id) && (!r.incomeType || r.incomeType === 'rent') && (r.month || r.datePaid || '').startsWith(String(year)))),
+    [properties, rentPayments, getEffectiveStatus, year]
   );
 
   // Last column to show: current month if viewing this year, else December.
@@ -45,14 +46,8 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
   // Matches incomeType 'rent' (or untyped legacy), on the rent-period month, status paid/partial.
   const cellFor = (prop, monthIdx) => {
     const monthKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
-    const expected = parseFloat(prop.monthlyRent) || 0;
-    const matches = rentPayments.filter(r => {
-      if (String(r.propertyId) !== String(prop.id)) return false;
-      if (r.incomeType && r.incomeType !== 'rent') return false;
-      if (r.status && !['paid', 'partial', 'late'].includes(r.status)) return false;
-      const period = (r.month || r.datePaid || '');
-      return period.startsWith(monthKey);
-    });
+    const exp = expectedRent({ property: prop, monthKey, rentPayments });
+    const matches = rentRecordsFor(rentPayments, prop.id, monthKey);
     const received = matches.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
     const late = matches.some(r => {
       if (r.status === 'late') return true;
@@ -65,20 +60,23 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
     });
     const isFuture = year === currentYear && monthIdx > currentMonthIdx;
 
-    let state; // paid | over | short | missing | future
+    // 'prior' = before today's household (previous tenant's payment, or nothing to expect);
+    // 'vacant' = no tenant and no payment. Neither counts toward expected/variance.
+    const expected = exp.expected ?? 0;
+    let state; // paid | over | short | missing | future | prior | vacant
     if (isFuture) state = 'future';
+    else if (exp.expected == null) state = received > 0 ? 'prior' : 'vacant';
     else if (received === 0) state = 'missing';
     else if (received >= expected - 1) state = received > expected + 1 ? 'over' : 'paid';
     else state = 'short';
-
-    return { expected, received, late, state, count: matches.length };
+    return { expected, received, late, state, kind: exp.kind, count: matches.length };
   };
 
   // Precompute the grid + per-property YTD rollups.
   const grid = useMemo(() => {
     return rentProps.map(p => {
       const cells = months.map(m => ({ monthIdx: m, ...cellFor(p, m) }));
-      const billable = cells.filter(c => c.state !== 'future');
+      const billable = cells.filter(c => !['future', 'prior', 'vacant'].includes(c.state));
       const expectedYtd = billable.reduce((s, c) => s + c.expected, 0);
       const receivedYtd = billable.reduce((s, c) => s + c.received, 0);
       return { property: p, cells, expectedYtd, receivedYtd, varianceYtd: receivedYtd - expectedYtd };
@@ -111,11 +109,13 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
     over: 'bg-teal-500/15 text-teal-300',
     short: 'bg-yellow-500/15 text-yellow-300',
     missing: 'bg-red-500/10 text-red-300/80',
+    prior: 'bg-white/[0.04] text-white/35',
+    vacant: 'text-white/15',
     future: 'text-white/15',
   };
 
   const handleCell = (prop, c) => {
-    if (c.state === 'future') return;
+    if (c.state === 'future' || c.state === 'vacant') return;
     const monthKey = `${year}-${String(c.monthIdx + 1).padStart(2, '0')}`;
     onRecordRent?.(prop, monthKey, c);
   };
@@ -192,6 +192,8 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-500/30 inline-block" /> Short</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/25 inline-block" /> Missing</span>
           <span className="flex items-center gap-1"><span className="text-orange-400">&#9679;</span> Late</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-white/10 inline-block" /> Previous tenant</span>
+          <span className="flex items-center gap-1 text-white/30">· Vacant / before move-in</span>
         </div>
         <div className="overflow-x-auto -mx-4 px-4">
           <table className="w-full text-xs border-separate" style={{ borderSpacing: '3px' }}>
@@ -215,12 +217,13 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
                     <td key={c.monthIdx} className="p-0">
                       <button
                         onClick={() => handleCell(row.property, c)}
-                        disabled={c.state === 'future'}
-                        title={c.state === 'future' ? '' :
-                          `${MONTH_NAMES[c.monthIdx]} ${year} — ${formatCurrency(c.received)} of ${formatCurrency(c.expected)}${c.late ? ' (late)' : ''}`}
-                        className={`relative w-full min-w-[44px] h-9 rounded-lg text-center font-medium transition ${cellStyles[c.state]} ${c.state !== 'future' ? 'hover:ring-1 hover:ring-white/30 cursor-pointer' : 'cursor-default'}`}
+                        disabled={c.state === 'future' || c.state === 'vacant'}
+                        title={c.state === 'future' ? '' : c.state === 'vacant' ? `${MONTH_NAMES[c.monthIdx]} ${year} — vacant / before move-in`
+                          : c.state === 'prior' ? `${MONTH_NAMES[c.monthIdx]} ${year} — ${formatCurrency(c.received)} from the previous tenant`
+                          : `${MONTH_NAMES[c.monthIdx]} ${year} — ${formatCurrency(c.received)} of ${formatCurrency(c.expected)}${c.kind === 'prorated' ? ' (prorated move-in month)' : ''}${c.late ? ' (late)' : ''}`}
+                        className={`relative w-full min-w-[44px] h-9 rounded-lg text-center font-medium transition ${cellStyles[c.state]} ${!['future', 'vacant'].includes(c.state) ? 'hover:ring-1 hover:ring-white/30 cursor-pointer' : 'cursor-default'}`}
                       >
-                        {c.state === 'future' ? '·'
+                        {c.state === 'future' || c.state === 'vacant' ? '·'
                           : c.state === 'missing' ? '—'
                           : formatCurrency(c.received).replace(/\.00$/, '')}
                         {c.late && c.state !== 'future' && c.state !== 'missing' && (

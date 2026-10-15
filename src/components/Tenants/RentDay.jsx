@@ -182,19 +182,25 @@ export default function RentDay({
           const p = r.property;
           const isOpen = !!expanded[p.id];
           const cls = r.status === 'unpaid' ? unpaidStyle(r.phase) : statusStyle[r.status];
-          const badge = r.status === 'paid' ? { t: 'Paid', c: 'text-green-400' }
-            : r.status === 'partial' ? { t: `Partial · ${formatCurrency(r.balance)} left`, c: 'text-yellow-400' }
-            : r.phase === 'late' ? { t: `${r.daysPast}d late`, c: 'text-red-400' }
-            : r.phase === 'grace' ? { t: `Due ${formatDate(r.dueDate).replace(/, \d{4}$/, '')} · grace`, c: 'text-orange-300' }
+          const short = (d) => formatDate(d).replace(/, \d{4}$/, '');
+          // pill = settlement state; detail = timing (days count from the due date; grace is separate)
+          const pill = r.status === 'paid' ? { t: 'Paid', c: 'bg-emerald-500/20 text-emerald-300' }
+            : r.status === 'partial' ? { t: 'Partial', c: 'bg-yellow-500/20 text-yellow-300' }
+            : r.phase === 'late' ? { t: 'Late', c: 'bg-red-500/20 text-red-300' }
+            : { t: 'Due', c: 'bg-white/10 text-white/60' };
+          const badge = r.status === 'paid' ? { t: r.dueKind === 'prorated' ? `Prorated move-in month` : `${formatCurrency(r.paid)} received`, c: 'text-green-400/80' }
+            : r.status === 'partial' ? { t: `${formatCurrency(r.balance)} still owed`, c: 'text-yellow-400' }
+            : r.phase === 'late' ? { t: `${r.daysPast}d past the ${short(r.dueDate)} due date${r.terms.graceDays ? ` · grace ended ${short(new Date(new Date(r.dueDate + 'T00:00:00').getTime() + r.terms.graceDays * 86400000).toISOString().slice(0, 10))}` : ''}`, c: 'text-red-400' }
+            : r.phase === 'grace' ? { t: `Due ${short(r.dueDate)} · in grace period`, c: 'text-orange-300' }
             : r.phase === 'due' ? { t: 'Due today', c: 'text-orange-300' }
-            : { t: `Due ${formatDate(r.dueDate).replace(/, \d{4}$/, '')}`, c: 'text-white/50' };
+            : { t: `Due ${short(r.dueDate)}${r.dueKind === 'prorated' ? ' · prorated move-in month' : ''}`, c: 'text-white/50' };
           return (
             <div key={p.id} className={`rounded-2xl border p-3 ${cls}`}>
               <div className="flex items-center justify-between gap-2">
                 <button onClick={() => setExpanded(e => ({ ...e, [p.id]: !e[p.id] }))} className="flex items-center gap-2 min-w-0 text-left">
                   <span className="text-lg flex-shrink-0">{p.emoji || '🏠'}</span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                    <p className="text-sm font-semibold text-white truncate flex items-center gap-2">{p.name} <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${pill.c}`}>{pill.t}</span></p>
                     <p className={`text-xs ${badge.c}`}>{badge.t}{r.terms.lateFee > 0 && r.phase === 'late' && r.status !== 'paid' ? ` · +${formatCurrency(r.terms.lateFee)} fee` : ''}</p>
                   </div>
                 </button>
