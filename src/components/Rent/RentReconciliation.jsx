@@ -24,8 +24,11 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
   const recordedThisMonth = rentPayments
     .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.incomeType === 'rent' || !r.incomeType) && (r.datePaid || r.month || '').startsWith(curKey))
     .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const depositedThisMonth = (incomeActuals && incomeActuals.months && incomeActuals.months[curKey] && incomeActuals.months[curKey].total) || 0;
-  const reconDiff = depositedThisMonth - recordedThisMonth;
+  // Bank side: null = no deposits imported for this month (not the same as $0 deposited).
+  const bankMonth = incomeActuals && incomeActuals.months && incomeActuals.months[curKey];
+  const depositedThisMonth = bankMonth ? (parseFloat(bankMonth.total) || 0) : null;
+  const reconDiff = depositedThisMonth == null ? null : depositedThisMonth - recordedThisMonth;
+  const curMonthName = now.toLocaleDateString('en-US', { month: 'long' });
   const [year, setYear] = useState(currentYear);
 
   // Properties we expect to collect rent on (current status + positive monthly rent).
@@ -131,25 +134,31 @@ export default function RentReconciliation({ properties, rentPayments, getEffect
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">Rent Reconciliation</h2>
-          <p className="text-xs text-white/40">Expected vs collected per property. Tap a cell to record or fix a payment.</p>
+          <p className="text-xs text-white/40">Expected vs collected per property, by the month a payment is for. Tap a cell to record or fix a payment.</p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setYear(y => y - 1)} className="w-8 h-8 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 text-sm">&lsaquo;</button>
+          <button onClick={() => setYear(y => y - 1)} aria-label="Previous year" title="Previous year" className="w-8 h-8 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 text-sm">&lsaquo;</button>
           <span className="px-3 text-sm font-semibold text-white tabular-nums">{year}</span>
-          <button onClick={() => setYear(y => Math.min(currentYear, y + 1))} disabled={year >= currentYear}
+          <button onClick={() => setYear(y => Math.min(currentYear, y + 1))} disabled={year >= currentYear} aria-label="Next year" title="Next year"
             className="w-8 h-8 rounded-lg bg-white/[0.06] text-white/60 hover:bg-white/10 text-sm disabled:opacity-30">&rsaquo;</button>
         </div>
       </div>
 
       {/* Bank-deposit reconcile (this month) — from mikesmoney via the Rupert bridge */}
       {incomeActuals && (
-        <div className={`rounded-2xl border p-4 flex items-center justify-between ${Math.abs(reconDiff) < 1 ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/40 bg-amber-500/10'}`}>
+        <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 ${
+          reconDiff == null ? 'border-white/10 bg-white/[0.03]' : Math.abs(reconDiff) < 1 ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/40 bg-amber-500/10'
+        }`}>
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-white/50">This month · bank reconcile</div>
-            <div className="text-sm text-white/85 mt-0.5">Recorded <b>{formatCurrency(recordedThisMonth)}</b> · Deposited <b>{formatCurrency(depositedThisMonth)}</b></div>
+            <div className="text-[11px] uppercase tracking-wider text-white/50">{curMonthName} · bank reconcile</div>
+            <div className="text-sm text-white/85 mt-0.5">
+              Received <b>{formatCurrency(recordedThisMonth)}</b> <span className="text-white/40">(by date paid)</span>
+              {' · '}Bank deposits <b>{depositedThisMonth == null ? '—' : formatCurrency(depositedThisMonth)}</b>
+            </div>
+            {depositedThisMonth == null && <div className="text-[11px] text-white/35 mt-0.5">No bank deposits imported for {curMonthName} yet, so nothing to compare against.</div>}
           </div>
-          <div className={`text-sm font-bold ${Math.abs(reconDiff) < 1 ? 'text-emerald-400' : 'text-amber-300'}`}>
-            {Math.abs(reconDiff) < 1 ? 'matched ✓' : `${reconDiff > 0 ? '+' : ''}${formatCurrency(reconDiff)}`}
+          <div className={`text-sm font-bold shrink-0 ${reconDiff == null ? 'text-white/40' : Math.abs(reconDiff) < 1 ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {reconDiff == null ? 'Not reconciled' : Math.abs(reconDiff) < 1 ? 'matched ✓' : `${reconDiff > 0 ? '+' : ''}${formatCurrency(reconDiff)}`}
           </div>
         </div>
       )}

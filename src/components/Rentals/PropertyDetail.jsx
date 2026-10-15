@@ -3,7 +3,7 @@ import { ArrowLeft, Edit3, MapPin, User, DollarSign, Calendar, Phone, Mail, File
 import { tenantStatuses, capitalConditions } from '../../constants';
 import { getPropertyTenants } from '../../hooks/useProperties';
 import { leaseState } from '../../rentLogic.js';
-import { formatCurrency } from '../../utils';
+import { formatCurrency, formatDate } from '../../utils';
 
 const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAddTenant, onRemoveTenant, onUpdateProperty, expenses = [], rentPayments = [] }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -310,12 +310,16 @@ const PropertyDetail = ({ property, onBack, onEdit, onDelete, onEditTenant, onAd
                               <Calendar className="w-3.5 h-3.5" /> Start: {tenant.leaseStart}
                             </div>
                           )}
-                          {tenant.leaseEnd && (
+                          {lease.kind === 'month-to-month' ? (
                             <div className="flex items-center gap-1.5 text-white/60">
-                              <Calendar className="w-3.5 h-3.5" /> End: {tenant.leaseEnd}
+                              <Calendar className="w-3.5 h-3.5" /> Month-to-month{tenant.leaseEnd ? <span className="text-xs text-white/40">(term ended {formatDate(tenant.leaseEnd)})</span> : null}
+                            </div>
+                          ) : tenant.leaseEnd ? (
+                            <div className="flex items-center gap-1.5 text-white/60">
+                              <Calendar className="w-3.5 h-3.5" /> End: {formatDate(tenant.leaseEnd)}
                               {lease.kind !== 'none' && <span className={`text-xs ml-1 ${lease.color}`}>({lease.label})</span>}
                             </div>
-                          )}
+                          ) : null}
                           {tenant.monthlyRent && (
                             <div className="flex items-center gap-1.5 text-emerald-400">
                               <DollarSign className="w-3.5 h-3.5" /> ${parseFloat(tenant.monthlyRent).toLocaleString()}/mo

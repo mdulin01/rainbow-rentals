@@ -298,14 +298,24 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                       </td>
                       <td className="px-4 py-3">{getStatusBadge(tenant.status)}</td>
                       <td className="px-4 py-3">
-                        {(tenant.leaseEnd || tenant.leaseType === 'month-to-month') ? (
-                          <div>
-                            {tenant.leaseEnd && <span className="text-sm text-white/70">{formatDate(tenant.leaseEnd)}</span>}
-                            {(() => { const st = leaseState(tenant); return st.short ? <span className={`text-xs ml-2 ${st.color}`}>{st.short}</span> : null; })()}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-white/30">—</span>
-                        )}
+                        {(() => {
+                          const st = leaseState(tenant);
+                          if (st.kind === 'month-to-month') {
+                            return (
+                              <div>
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10 text-white/70">Month-to-month</span>
+                                {tenant.leaseEnd && <span className="block text-[11px] text-white/35 mt-1">term ended {formatDate(tenant.leaseEnd)}</span>}
+                              </div>
+                            );
+                          }
+                          if (!tenant.leaseEnd) return <span className="text-sm text-white/30" title="No lease end date entered">No end date</span>;
+                          return (
+                            <div>
+                              <span className="text-sm text-white/70">{formatDate(tenant.leaseEnd)}</span>
+                              {st.short && <span className={`text-xs ml-2 ${st.color}`}>{st.short}</span>}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-medium text-emerald-400">

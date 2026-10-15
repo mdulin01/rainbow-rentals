@@ -190,11 +190,13 @@ const PropertyCard = ({ property, onEdit, onDelete, onViewDetails, documents = [
                 const activeTenants = tenants.filter(t => t.leaseStart || t.leaseEnd);
                 if (activeTenants.length === 0) return null;
                 const t = activeTenants[0];
-                const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+                const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                const st = leaseState(t);
+                const text = st.kind === 'month-to-month'
+                  ? `Month-to-month${t.leaseStart ? ` · started ${fmt(t.leaseStart)}` : ''}${t.leaseEnd ? ` · term ended ${fmt(t.leaseEnd)}` : ''}`
+                  : `Lease: ${fmt(t.leaseStart) || 'start not entered'} – ${fmt(t.leaseEnd) || 'no end date'}`;
                 return (
-                  <p className="text-[10px] text-white/35 mt-1">
-                    Lease: {fmt(t.leaseStart)} – {fmt(t.leaseEnd)}
-                  </p>
+                  <p className="text-[10px] text-white/35 mt-1">{text}</p>
                 );
               })()}
             </div>

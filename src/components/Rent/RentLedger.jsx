@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { rentStatuses, incomeCategories } from '../../constants';
 import { formatDate, formatCurrency, currentMonthKey, todayLocalStr, monthName } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
@@ -98,11 +98,20 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
     );
   };
 
-  // Summary stats — same calculation as Rent Day (rent-collecting properties only).
-  const monthRows = computeRentRows({ properties, rentPayments, monthKey: currentMonthKey(), today: todayLocalStr() });
+  // Summary tiles. Two different bases, labelled as such:
+  //  - "rent collected / outstanding / late" are by RENT MONTH (what a payment is for) — the
+  //    same computeRentRows calculation Rent Day uses, so the counts agree with Home.
+  //  - "received" is by DATE PAID (cash in the door this month), whichever month it was for.
+  const monthKey = currentMonthKey();
+  const monthLabel = monthName(monthKey);
+  const monthRows = computeRentRows({ properties, rentPayments, monthKey, today: todayLocalStr() });
   const totalExpected = monthRows.reduce((s, r) => s + r.due, 0);
   const collected = monthRows.reduce((s, r) => s + Math.min(r.paid, r.due), 0);
   const outstanding = monthRows.reduce((s, r) => s + r.balance, 0);
+  const lateNow = monthRows.filter(r => r.status !== 'paid' && r.phase === 'late').length; // same rule as Rent Day
+  const receivedThisMonth = rentPayments
+    .filter(r => ['paid', 'partial', 'late'].includes(r.status) && (r.datePaid || '').startsWith(monthKey))
+    .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
 
   return (
     <div>
@@ -121,24 +130,31 @@ export default function RentLedger({ rentPayments, properties, onAdd, onEdit, on
       </div>
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Expected Monthly</p>
+          <p className="text-white/40 text-xs mb-1">{monthLabel} rent due</p>
           <p className="text-xl font-bold text-white">{formatCurrency(totalExpected)}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Collected ({monthName(currentMonthKey())})</p>
+          <p className="text-white/40 text-xs mb-1">{monthLabel} rent collected</p>
           <p className="text-xl font-bold text-emerald-400">{formatCurrency(collected)}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Outstanding</p>
+          <p className="text-white/40 text-xs mb-1">{monthLabel} rent outstanding</p>
           <p className={`text-xl font-bold ${outstanding > 0 ? 'text-red-400' : 'text-green-400'}`}>{formatCurrency(Math.max(0, outstanding))}</p>
         </div>
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-          <p className="text-white/40 text-xs mb-1">Late Payments</p>
-          <p className="text-xl font-bold text-orange-400">{rentPayments.filter(r => r.status === 'late').length}</p>
+          <p className="text-white/40 text-xs mb-1">Late now</p>
+          <p className="text-xl font-bold text-orange-400">{lateNow} <span className="text-xs font-normal text-white/40">household{lateNow === 1 ? '' : 's'}</span></p>
+        </div>
+        <div className="bg-sky-500/[0.07] border border-sky-400/20 rounded-2xl p-3">
+          <p className="text-sky-200/60 text-xs mb-1">Received in {monthLabel}</p>
+          <p className="text-xl font-bold text-sky-300">{formatCurrency(receivedThisMonth)}</p>
         </div>
       </div>
+      <p className="text-[11px] text-white/30 mb-4">
+        Rent due / collected / outstanding / late count by the month a payment is <em>for</em> (same as Home). <span className="text-sky-200/60">Received</span> counts cash by the date it was paid, including catch-up payments for earlier months.
+      </p>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">

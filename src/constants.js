@@ -237,7 +237,7 @@ export const propertyColors = [
 ];
 
 // How a tenant pays rent (recorded on each payment; preferred channel on the tenant)
-export const paymentMethods = ['Zelle', 'Check', 'Money order', 'Cash', 'Other'];
+export const paymentMethods = ['Zelle', 'Avail', 'Check', 'Money order', 'Cash', 'Other'];
 
 // Rent reminder templates. Placeholders: {first} {amount} {property} {month} {dueDate}
 // {balance} {lateFeeLine} {payInstructions} {from}

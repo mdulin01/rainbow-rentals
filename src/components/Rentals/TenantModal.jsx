@@ -314,7 +314,7 @@ const TenantModal = ({ property, properties = [], tenant, onSave, onClose, onUpl
                 <label className="block text-slate-400 text-sm mb-2">After the end date</label>
                 <div className="flex flex-wrap gap-2">
                   {[['', 'Rolls to month-to-month (default)'], ['month-to-month', 'Month-to-month now'], ['fixed', 'Fixed term — alert me when it ends']].map(([v, l]) => (
-                    <button key={v} type="button" onClick={() => setFormData(prev => ({ ...prev, leaseType: v }))}
+                    <button key={v} type="button" onClick={() => setFormData(prev => ({ ...prev, leaseType: v }))} aria-pressed={formData.leaseType === v}
                       className={`px-3 py-2 rounded-xl text-xs font-medium border transition ${formData.leaseType === v ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300' : 'bg-white/[0.05] border-white/[0.08] text-white/50 hover:bg-white/10'}`}>
                       {l}
                     </button>

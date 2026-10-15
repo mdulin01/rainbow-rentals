@@ -80,9 +80,9 @@ export default function RentDay({
           <p className="text-xs text-white/40">Who's paid, who to nudge, and what was said.</p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setMonthKey(k => shiftMonthKey(k, -1))} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-white/70" /></button>
+          <button onClick={() => setMonthKey(k => shiftMonthKey(k, -1))} aria-label="Previous month" title="Previous month" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-white/70" /></button>
           <span className="text-sm font-semibold text-white min-w-[110px] text-center">{monthName(monthKey)} {monthKey.slice(0, 4)}</span>
-          <button onClick={() => setMonthKey(k => shiftMonthKey(k, 1))} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center"><ChevronRight className="w-4 h-4 text-white/70" /></button>
+          <button onClick={() => setMonthKey(k => shiftMonthKey(k, 1))} aria-label="Next month" title="Next month" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center"><ChevronRight className="w-4 h-4 text-white/70" /></button>
           {canManage && (
             <button onClick={openSettings} title="Payment instructions & defaults" className="w-8 h-8 ml-1 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center"><Settings className="w-4 h-4 text-white/70" /></button>
           )}

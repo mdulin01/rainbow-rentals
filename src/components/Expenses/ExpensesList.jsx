@@ -36,7 +36,8 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
   const filtered = useMemo(() => {
     let result = [...regularExpenses];
     if (categoryFilter !== 'all') result = result.filter(e => e.category === categoryFilter);
-    if (propertyFilter !== 'all') result = result.filter(e => e.propertyId === propertyFilter);
+    if (propertyFilter === 'none') result = result.filter(e => !e.propertyId);
+    else if (propertyFilter !== 'all') result = result.filter(e => e.propertyId === propertyFilter);
     if (yearFilter !== 'all') result = result.filter(e => (e.date || '').startsWith(yearFilter));
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -289,6 +290,7 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
           className="px-3 py-2 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-red-500/50"
         >
           <option value="all">All Properties</option>
+          <option value="none">⚠ No property assigned</option>
           {properties.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -367,7 +369,11 @@ export default function ExpensesList({ expenses, properties, onAdd, onEdit, onDe
                     </td>
                     <td className="px-4 py-3">{getCategoryBadge(exp.category)}</td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-white/70">{exp.propertyName || '—'}</span>
+                      {exp.propertyId ? (
+                        <span className="text-sm text-white/70">{exp.propertyName || '—'}</span>
+                      ) : (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-300" title="Tap to open and pick a property">⚠ No property</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-medium text-red-400">{formatCurrency(exp.amount || 0)}</span>

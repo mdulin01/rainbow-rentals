@@ -1072,7 +1072,7 @@ export default function RainbowRentals() {
               {activeSection === 'money' && (
                 <div className="flex gap-1.5 mb-4 items-center sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
                   {MONEY_VIEWS.map(v => (
-                    <button key={v.id} onClick={() => setMoneyView(v.id)}
+                    <button key={v.id} onClick={() => setMoneyView(v.id)} aria-pressed={moneyView === v.id}
                       className={`flex-1 md:flex-none px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition ${
                         moneyView === v.id ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
                       }`}><span className="mr-1">{v.emoji}</span>{v.label}</button>
@@ -1103,7 +1103,8 @@ export default function RainbowRentals() {
 
               {activeSection === 'money' && moneyView === 'pnl' && (
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-4">Profit & Loss</h2>
+                  <h2 className="text-xl font-bold text-white">Profit & Loss</h2>
+                  <p className="text-xs text-white/40 mb-4">Income by the rent month a payment is for; expenses by expense date. Cash received by date is on the Rent grid.</p>
 
                   {/* Monthly Report Table */}
                   {(() => {
@@ -1358,11 +1359,11 @@ export default function RainbowRentals() {
                       <div className="flex gap-1.5 mb-4 items-center justify-between sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
                         <div className="flex gap-1.5">
                           {[
-                            { id: 'grid', emoji: '🏠' },
-                            { id: 'tasks', emoji: '📋' },
-                            { id: 'overview', emoji: '📊' },
+                            { id: 'grid', emoji: '🏠', label: 'Property cards' },
+                            { id: 'tasks', emoji: '📋', label: 'Tasks by property' },
+                            { id: 'overview', emoji: '📊', label: 'Portfolio overview' },
                           ].map(tab => (
-                            <button key={tab.id} onClick={() => setPropertyViewMode(tab.id)}
+                            <button key={tab.id} onClick={() => setPropertyViewMode(tab.id)} aria-label={tab.label} title={tab.label} aria-pressed={propertyViewMode === tab.id}
                               className={`px-3 md:px-4 py-2 rounded-xl font-medium transition text-base md:text-lg text-center ${
                                 propertyViewMode === tab.id ? 'bg-teal-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
                               }`}>{tab.emoji}</button>
@@ -1897,11 +1898,11 @@ export default function RainbowRentals() {
                   <div className="flex gap-1.5 mb-4 items-center justify-between sticky top-[57px] z-20 bg-slate-900/95 backdrop-blur-md py-3 -mx-4 px-4">
                     <div className="flex gap-1.5">
                       {[
-                        { id: 'byType', emoji: '📁' },
-                        { id: 'byProperty', emoji: '🏠' },
-                        { id: 'all', emoji: '📄' },
+                        { id: 'byType', emoji: '📁', label: 'By type' },
+                        { id: 'byProperty', emoji: '🏠', label: 'By property' },
+                        { id: 'all', emoji: '📄', label: 'All documents' },
                       ].map(tab => (
-                        <button key={tab.id} onClick={() => setDocumentViewMode(tab.id)}
+                        <button key={tab.id} onClick={() => setDocumentViewMode(tab.id)} aria-label={tab.label} title={tab.label} aria-pressed={documentViewMode === tab.id}
                           className={`px-3 md:px-4 py-2 rounded-xl font-medium transition text-base md:text-lg text-center ${
                             documentViewMode === tab.id ? 'bg-amber-500 text-white shadow-lg' : 'bg-white/10 text-slate-300 hover:bg-white/20'
                           }`}>{tab.emoji}</button>
