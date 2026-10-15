@@ -67,7 +67,7 @@ export const computeRentRows = ({ properties, rentPayments, commsLog = [], setti
   });
 
 /** Placeholder values for a reminder to `tenant` about `property` for `monthKey`. */
-export const reminderVars = ({ property, tenant, monthKey, terms, settings = {}, amountDue, balance, from }) => {
+export const reminderVars = ({ property, tenant, monthKey, terms, settings = {}, amountDue, balance, from, portalUrl }) => {
   const first = tenant?.firstName || (tenant?.name || '').trim().split(/\s+/)[0] || 'there';
   const due = amountDue ?? (parseFloat(property?.monthlyRent) || 0);
   const dueDate = rentDueDateStr(monthKey, terms.dueDay);
@@ -81,12 +81,57 @@ export const reminderVars = ({ property, tenant, monthKey, terms, settings = {},
     dueDate: formatDate(dueDate).replace(/, \d{4}$/, ''),
     lateFeeLine: terms.lateFee > 0 ? `A ${formatCurrency(terms.lateFee)} late fee applies after the ${terms.graceDays}-day grace period. ` : '',
     payInstructions: payInstructions ? payInstructions + ' ' : '',
+    portalLine: portalUrl ? `Balance & lease details: ${portalUrl} ` : '',
     from: settings.fromName || from || 'Rainbow Rentals',
   };
 };
 
 export const renderReminder = (templateId, vars) =>
   fillTemplate((reminderTemplates.find(x => x.id === templateId) || reminderTemplates[0]).text, vars);
+
+/** Find the tenant (and property) whose private portal token matches. */
+export const findTenantByToken = (properties, token) => {
+  if (!token) return null;
+  for (const p of properties) {
+    for (const t of getPropertyTenants(p)) {
+      if (t.portalToken && t.portalToken === token) return { property: p, tenant: t };
+    }
+  }
+  return null;
+};
+
+/**
+ * Everything the tenant-facing portal page shows, computed from the same rules the app
+ * uses. Household-level money (the property's rent), this tenant's lease terms.
+ */
+export const tenantPortalData = ({ properties, rentPayments, settings = {}, property, tenant, today = todayLocalStr() }) => {
+  const monthKey = today.slice(0, 7);
+  const rows = computeRentRows({ properties, rentPayments, settings, monthKey, today });
+  const row = rows.find(r => String(r.property.id) === String(property.id)) || null;
+  const prior = unpaidPriorMonths({ properties, rentPayments, monthKey })
+    .filter(x => String(x.property.id) === String(property.id));
+  const terms = getLeaseTerms(property, settings);
+  const payments = rentPayments
+    .filter(r => String(r.propertyId) === String(property.id) && (!r.incomeType || r.incomeType === 'rent')
+      && ['paid', 'partial', 'late'].includes(r.status))
+    .sort((a, b) => (b.datePaid || b.month || '').localeCompare(a.datePaid || a.month || ''))
+    .slice(0, 8)
+    .map(r => ({ datePaid: r.datePaid || '', month: r.month || '', amount: parseFloat(r.amount) || 0, method: r.method || '' }));
+  const lease = leaseState(tenant, today);
+  return {
+    monthKey,
+    first: tenant.firstName || (tenant.name || '').trim().split(/\s+/)[0] || 'there',
+    property: { name: property.name || '', street: property.street || '', city: property.city || '', state: property.state || '', zip: property.zip || '' },
+    rent: row ? { due: row.due, paid: row.paid, balance: row.balance, status: row.status, phase: row.phase, dueDate: row.dueDate, daysPast: row.daysPast } : null,
+    priorOwed: prior.map(x => ({ monthKey: x.monthKey, due: x.due })),
+    terms,
+    lease: { start: tenant.leaseStart || '', end: tenant.leaseEnd || '', kind: lease.kind, label: lease.label, monthlyRent: parseFloat(property.monthlyRent) || 0, deposit: parseFloat(tenant.securityDeposit) || 0 },
+    payments,
+    payInstructions: (settings.payInstructions || '').trim(),
+    fromName: settings.fromName || 'Rainbow Rentals',
+    smsOk: tenant.smsOk !== false,
+  };
+};
 
 /** Find the tenant (and property) whose phone matches `phone`. */
 export const findTenantByPhone = (properties, phone) => {
@@ -165,9 +210,16 @@ export const computeAutoRows = ({ properties, rentPayments, commsLog, settings, 
 export const unpaidPriorMonths = ({ properties, rentPayments, monthKey }) => {
   const [y, m] = monthKey.split('-').map(Number);
   const out = [];
+  // Months before the current household moved in are not theirs to owe.
+  const movedIn = (p) => {
+    const starts = getPropertyTenants(p).filter(t => t.status !== 'former' && t.leaseStart).map(t => String(t.leaseStart).slice(0, 7)).sort();
+    return starts[0] || null;
+  };
   for (let mm = 1; mm < m; mm++) {
     const key = `${y}-${String(mm).padStart(2, '0')}`;
     rentProperties(properties).forEach(p => {
+      const since = movedIn(p);
+      if (since && key < since) return;
       const settled = rentPayments.some(r => String(r.propertyId) === String(p.id)
         && ['paid', 'partial', 'late'].includes(r.status)
         && (r.month || r.datePaid || '').startsWith(key));

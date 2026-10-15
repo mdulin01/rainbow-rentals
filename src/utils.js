@@ -195,3 +195,6 @@ export const isExcludedFromOwnership = (property) => {
   const name = (property.name || '').toLowerCase();
   return LEGACY_EXCLUDED_NAMES.some((excluded) => name.includes(excluded));
 };
+
+// Opaque id for a tenant's private portal link (/t/<token>). 32 hex chars = 128 bits.
+export const newPortalToken = () => globalThis.crypto.randomUUID().replace(/-/g, '');

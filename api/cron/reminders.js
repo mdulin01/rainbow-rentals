@@ -4,7 +4,7 @@
 // Also writes the weekly Firestore snapshot (rentalData/backup-YYYY-MM-DD) whether or not
 // auto reminders are on.
 // Auth: Vercel sets `Authorization: Bearer $CRON_SECRET` on cron invocations.
-import { loadAll, appendCommsLog, pushManagers, weeklyBackup } from '../_lib/data.js';
+import { loadAll, appendCommsLog, pushManagers, weeklyBackup, ensurePortalToken } from '../_lib/data.js';
 import { sendSms, twilioReady, publicUrl } from '../_lib/twilio.js';
 import { computeAutoRows, dueAutoReminders, reminderVars, renderReminder } from '../../src/rentLogic.js';
 import { currentMonthKey, todayLocalStr, normalizePhone } from '../../src/utils.js';
@@ -32,7 +32,9 @@ export default async function handler(req, res) {
     const sent = [], failed = [];
 
     for (const { row, tenant, kind, templateId } of due) {
-      const vars = reminderVars({ property: row.property, tenant, monthKey: row.monthKey, terms: row.terms, settings, amountDue: row.due, balance: row.balance });
+      let portalUrl = '';
+      if (!dryRun) { try { portalUrl = `${origin}/t/${await ensurePortalToken(row.property, tenant)}`; } catch (e) { console.error('portal token', e); } }
+      const vars = reminderVars({ property: row.property, tenant, monthKey: row.monthKey, terms: row.terms, settings, amountDue: row.due, balance: row.balance, portalUrl });
       const body = renderReminder(templateId, vars);
       const to = normalizePhone(tenant.phone);
       const id = `auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

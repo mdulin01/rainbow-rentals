@@ -57,6 +57,7 @@ Keep the JSON; it goes into a Vercel env var below. Never commit it.
 | `TWILIO_ACCOUNT_SID` | from the Twilio console home |
 | `TWILIO_AUTH_TOKEN` | same place (rotate it after restoring the dormant account) |
 | `TWILIO_MESSAGING_SERVICE_SID` | `MG…` from step 2 (preferred) — or `TWILIO_FROM` = `+1336…` before registration |
+| `PORTAL_CONTACT_PHONE` | Optional. Number shown on the tenant's balance page (`/t/<token>`) as "message us at…"; falls back to `TWILIO_FROM` |
 | `FIREBASE_SERVICE_ACCOUNT` | the whole JSON from step 4 (paste as one line, or base64) |
 | `CRON_SECRET` | any long random string; Vercel sends it on cron calls |
 | `ANTHROPIC_API_KEY` | optional — enables the 🦚 triage of tenant replies (summary + suggested answer). Without it, replies still land in the app, just untriaged |
@@ -87,3 +88,14 @@ temporarily put your number on a tenant), reply to it, and confirm it shows unde
   are fixed templates, not AI-written.
 - Tenant texts are sent to Anthropic for classification. Keep that in mind if a lease or
   privacy notice promises otherwise.
+
+## 7. Tenant balance page
+
+Every reminder (manual or automatic) ends with a private link, `https://rainbowrentals.app/t/<token>`,
+where the tenant sees this month's rent, what's paid, the balance, earlier months with no payment
+recorded, how to pay, their lease terms and recent payments. No login: the token is a 128-bit secret
+stored on the tenant record (`portalToken`), minted the first time you text them. Tenants can also
+text **BALANCE**, **LINK** or **LEASE** to the Rainbow Rentals number and get the link back
+automatically (the only automatic reply the app sends; it is logged in Rent Day like any other text).
+To copy a tenant's link yourself: Tenants → 🔗 on their row. To revoke a link, clear `portalToken`
+on the tenant in Firestore (a new one is minted on the next text).

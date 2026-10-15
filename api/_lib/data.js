@@ -3,6 +3,7 @@
 //   rentalData/rent       { payments: [...] }
 //   rentalData/comms      { settings: {...}, log: [...] }   (newest first, capped 500)
 //   pushTokens/{uid}      { token, email }
+import { randomBytes } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, messaging } from './firebase.js';
 
@@ -44,19 +45,31 @@ export async function patchCommsEntry(id, patch) {
   });
 }
 
-/** Flip a tenant's smsOk flag (STOP / START keywords). */
-export async function setTenantSmsOk(propertyId, tenantId, smsOk) {
+/** Merge `patch` into one tenant record (by id; legacy single-tenant records too). */
+export async function patchTenant(propertyId, tenantId, patch, by = 'sms') {
   const ref = db().doc('rentalData/properties');
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const props = (snap.exists && snap.data().properties) || [];
     const next = props.map(p => String(p.id) !== String(propertyId) ? p : {
       ...p,
-      tenants: (p.tenants || []).map(t => String(t.id) === String(tenantId) ? { ...t, smsOk } : t),
-      tenant: p.tenant && (!tenantId || String(tenantId).startsWith('legacy')) ? { ...p.tenant, smsOk } : p.tenant,
+      tenants: (p.tenants || []).map(t => String(t.id) === String(tenantId) ? { ...t, ...patch } : t),
+      tenant: p.tenant && (!tenantId || String(tenantId).startsWith('legacy')) ? { ...p.tenant, ...patch } : p.tenant,
     });
-    tx.set(ref, { properties: next, lastUpdated: new Date().toISOString(), updatedBy: 'sms' }, { merge: true });
+    tx.set(ref, { properties: next, lastUpdated: new Date().toISOString(), updatedBy: by }, { merge: true });
   });
+}
+
+/** Flip a tenant's smsOk flag (STOP / START keywords). */
+export const setTenantSmsOk = (propertyId, tenantId, smsOk) => patchTenant(propertyId, tenantId, { smsOk });
+
+/** The tenant's private portal token, minting and saving one if missing. */
+export async function ensurePortalToken(property, tenant) {
+  if (tenant.portalToken) return tenant.portalToken;
+  const token = randomBytes(16).toString('hex');
+  await patchTenant(property.id, tenant.id, { portalToken: token }, 'portal');
+  tenant.portalToken = token;
+  return token;
 }
 
 /** Web-push every manager who has a token. Best effort; dead tokens are removed. */

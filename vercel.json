@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/t/:token",
+      "destination": "/api/portal/:token"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

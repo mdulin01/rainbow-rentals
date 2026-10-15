@@ -58,6 +58,7 @@ import DocumentViewer from './components/Documents/DocumentViewer';
 import { useSharedHub } from './hooks/useSharedHub';
 import { useProperties, getPropertyTenants } from './hooks/useProperties';
 import { leaseAlerts } from './rentLogic.js';
+import { newPortalToken } from './utils';
 import { useDocuments } from './hooks/useDocuments';
 import { useRent } from './hooks/useRent';
 import { useExpenses, autoCreateRecurringExpenses, sanitizeForFirestore } from './hooks/useExpenses';
@@ -320,6 +321,19 @@ export default function RainbowRentals() {
     } catch (e) { console.error('comms settings save:', e); showToast && showToast('Not saved — ' + e.message, 'error'); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Each tenant gets a private /t/<token> page (balance, lease terms, how to pay). The token
+  // is minted the first time we text them and saved on the tenant record.
+  const ensurePortalToken = (property, tenant) => {
+    if (!tenant || tenant.portalToken || !canManage) return tenant;
+    const next = { ...tenant, portalToken: newPortalToken() };
+    _addOrUpdateTenant(property.id, next);
+    return next;
+  };
+  const openReminder = (target) => {
+    if (target?.property && target?.tenant) target = { ...target, tenant: ensurePortalToken(target.property, target.tenant) };
+    setShowReminder(target);
+  };
 
   // ========== ACTIVITY LOG + SOFT-DELETE (trash) ==========
   // rentalData/activity — append-only who/what/when (capped 300); powers the
@@ -1478,7 +1492,15 @@ export default function RainbowRentals() {
                   canManage={canManage}
                   onTextTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
-                    if (prop) setShowReminder({ property: prop, tenant, monthKey: new Date().toISOString().slice(0, 7), templateId: 'custom' });
+                    if (prop) openReminder({ property: prop, tenant, monthKey: new Date().toISOString().slice(0, 7), templateId: 'custom' });
+                  }}
+                  onCopyPortalLink={async (propertyId, tenant) => {
+                    const prop = properties.find(p => String(p.id) === String(propertyId));
+                    if (!prop) return;
+                    const t = ensurePortalToken(prop, tenant);
+                    const url = `${window.location.origin}/t/${t.portalToken}`;
+                    try { await navigator.clipboard.writeText(url); showToast(`Portal link for ${tenant.name} copied`, 'success'); }
+                    catch { window.prompt('Portal link', url); }
                   }}
                   onDeleteTenant={(propertyId, tenant) => {
                     const prop = properties.find(p => String(p.id) === String(propertyId));
@@ -1590,7 +1612,7 @@ export default function RainbowRentals() {
                       currentUser={currentUser}
                       canManage={canManage}
                       onSaveSettings={saveCommsSettings}
-                      onCompose={(target) => setShowReminder(target)}
+                      onCompose={openReminder}
                       onRecord={(prefill) => setShowAddRentModal(prefill)}
                       onPatchLog={patchComm}
                       onSendSms={sendSmsViaServer}

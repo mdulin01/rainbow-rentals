@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronDown, ChevronUp, User, Phone, Mail, Calendar, DollarSign, ClipboardPaste, X, Trash2, MessageSquare } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronUp, Phone, Mail, ClipboardPaste, X, Trash2, MessageSquare, Link2 } from 'lucide-react';
 import { normalizePhone } from '../../utils';
 import { parsePastedTenants as parsePasted, matchPropertyByAddress as matchProperty, leaseState, tenantRent, getPropertyTenants as propTenants } from '../../rentLogic.js';
 import { tenantStatuses } from '../../constants';
 import { formatDate, formatCurrency } from '../../utils';
 import { getPropertyTenants } from '../../hooks/useProperties';
 
-export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, onDeleteTenant, onTextTenant, canManage = true }) {
+export default function TenantsList({ properties, onEditTenant, onAddTenant, onViewProperty, onImportTenants, onDeleteTenant, onTextTenant, onCopyPortalLink, canManage = true }) {
   const [showImport, setShowImport] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [preview, setPreview] = useState(null); // [{ name, phone, address, propertyId, exists }]
@@ -343,6 +343,12 @@ export default function TenantsList({ properties, onEditTenant, onAddTenant, onV
                             <button onClick={e => { e.stopPropagation(); onTextTenant(tenant.propertyId, tenant); }}
                               className="text-teal-300/80 hover:text-teal-300" title={`Text ${tenant.name}`}>
                               <MessageSquare className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canManage && onCopyPortalLink && (
+                            <button onClick={e => { e.stopPropagation(); onCopyPortalLink(tenant.propertyId, tenant); }}
+                              className="text-white/40 hover:text-white/70" title={`Copy ${tenant.name}'s private balance & lease link`} aria-label={`Copy ${tenant.name}'s portal link`}>
+                              <Link2 className="w-4 h-4" />
                             </button>
                           )}
                           {canManage && onDeleteTenant && (

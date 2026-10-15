@@ -18,10 +18,12 @@ export default function ReminderComposer({ target, settings = {}, currentUser, o
   const [noteDraft, setNoteDraft] = useState('');
   const [channel, setChannel] = useState(target.channel || 'sms'); // sms | email | call | note
 
+  // Private balance/lease page for this tenant (token is created when the composer opens).
+  const portalUrl = tenant?.portalToken && typeof window !== 'undefined' ? `${window.location.origin}/t/${tenant.portalToken}` : '';
   const vars = useMemo(() => reminderVars({
-    property, tenant, monthKey, terms, settings, from: currentUser,
+    property, tenant, monthKey, terms, settings, from: currentUser, portalUrl,
     amountDue: target.amountDue, balance: target.balance,
-  }), [tenant, property, monthKey, terms, settings, currentUser, target.amountDue, target.balance]);
+  }), [tenant, property, monthKey, terms, settings, currentUser, target.amountDue, target.balance, portalUrl]);
 
   const render = (id) => renderReminder(id, vars);
   const [text, setText] = useState(() => target.text || render(templateId));
