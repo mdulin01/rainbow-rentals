@@ -27,6 +27,7 @@ Home (Rent Day, lease alerts, to-dos, checklists, card charges, expense review, 
 `rentalData/{properties, rent, expenses, comms, incomeActuals, cardInbox, expenseReview, activity, trash, backupMeta, backup-YYYY-MM-DD}`, `pushTokens/{uid}`, `rupert/note`.
 
 ## Operations
+- Read-only Monday digest: `GET /api/digest`, protected by server-side `DIGEST_SECRET`; setup, response semantics and checks in [docs/digest-endpoint.md](docs/digest-endpoint.md).
 - Setup for texting: `docs/twilio-setup.md` (Twilio env vars, A2P 10DLC registration, `CRON_SECRET`, `ANTHROPIC_API_KEY`).
 - Daily cron 14:00 UTC (`vercel.json`): sends scheduled reminders when enabled under Rent Day ⚙️, and writes the weekly Firestore snapshot.
 - Help page for the operator: `public/help.html` (linked from the app header).

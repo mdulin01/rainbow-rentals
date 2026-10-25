@@ -3,8 +3,8 @@ import { generateKeyPairSync, sign, verify } from 'node:crypto';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
-test('SMS functions load without CommonJS-to-ESM require support', async () => {
-  for (const path of ['sms/send', 'sms/inbound', 'sms/status', 'cron/reminders']) {
+test('API functions load without CommonJS-to-ESM require support', async () => {
+  for (const path of ['sms/send', 'sms/inbound', 'sms/status', 'cron/reminders', 'digest']) {
     const module = await import(`../api/${path}.js`);
     assert.equal(typeof module.default, 'function');
   }
