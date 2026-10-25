@@ -7,8 +7,8 @@ import { randomBytes } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, messaging } from './firebase.js';
 
-export async function loadAll() {
-  const d = db();
+export async function loadAll({ firestore = db() } = {}) {
+  const d = firestore;
   const [p, r, c] = await Promise.all([
     d.doc('rentalData/properties').get(),
     d.doc('rentalData/rent').get(),
