@@ -115,6 +115,8 @@ test('Eastern month changes at local midnight, not UTC midnight, across year end
   assert.equal(before.properties[0].rentReceivedThisMonth, 1500);
   assert.equal(after.asOf, '2027-01-01');
   assert.equal(after.properties[0].rentReceivedThisMonth, 0);
+  assert.equal(after.properties[0].status, 'unpaid');
+  assert.equal(after.properties[0].daysLate, 0);
 });
 
 test('Eastern daylight-time month boundary and UTC payment timestamps use the same calendar', () => {
@@ -126,6 +128,8 @@ test('Eastern daylight-time month boundary and UTC payment timestamps use the sa
   assert.equal(before.properties[0].rentReceivedThisMonth, 1500);
   assert.equal(after.asOf, '2026-08-01');
   assert.equal(after.properties[0].rentReceivedThisMonth, 0);
+  assert.equal(after.properties[0].status, 'unpaid');
+  assert.equal(after.properties[0].daysLate, 0);
 });
 
 test('prepaid and prior-month cash do not confuse cash received with rent-month settlement', () => {
@@ -242,13 +246,16 @@ test('rent due reuses move-in proration, and excludes non-rent receipts', () => 
 });
 
 
-test('zero payment before the due date and through grace uses partial within the four-status contract', () => {
+test('zero payment before the due date and through grace is unpaid', () => {
   const p = property('sample');
   p.tenants[0].rentDueDay = 5;
-  for (const date of ['2026-11-01T16:00:00Z', '2026-11-05T16:00:00Z', '2026-11-11T04:59:59Z']) {
-    const row = buildDigest(data([p]), new Date(date)).properties[0];
-    assert.equal(row.status, 'partial');
-    assert.equal(row.daysLate, 0);
+  for (const payments of [[], [payment('sample', { status: 'unpaid', amount: 0 })]]) {
+    for (const date of ['2026-11-01T16:00:00Z', '2026-11-05T16:00:00Z', '2026-11-11T04:59:59Z']) {
+      const row = buildDigest(data([p], payments), new Date(date)).properties[0];
+      assert.equal(row.status, 'unpaid');
+      assert.equal(row.rentReceivedThisMonth, 0);
+      assert.equal(row.daysLate, 0);
+    }
   }
   const late = buildDigest(data([p]), new Date('2026-11-11T05:00:00Z')).properties[0];
   assert.equal(late.status, 'late');
@@ -262,9 +269,9 @@ test('DST month and grace boundaries change at Eastern midnight', () => {
   assert.equal(october.asOf, '2026-10-31');
   assert.equal(october.properties[0].status, 'paid');
   assert.equal(november.asOf, '2026-11-01');
-  assert.equal(november.properties[0].status, 'partial');
+  assert.equal(november.properties[0].status, 'unpaid');
   assert.equal(november.properties[0].rentReceivedThisMonth, 0);
-  assert.equal(buildDigest(fixtures, new Date('2026-11-07T04:59:59Z')).properties[0].status, 'partial');
+  assert.equal(buildDigest(fixtures, new Date('2026-11-07T04:59:59Z')).properties[0].status, 'unpaid');
   const late = buildDigest(fixtures, new Date('2026-11-07T05:00:00Z')).properties[0];
   assert.equal(late.status, 'late');
   assert.equal(late.daysLate, 6);

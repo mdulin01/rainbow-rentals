@@ -58,7 +58,7 @@ export function buildDigest(data, now = new Date()) {
       const row = byProperty.get(String(p.id));
       const vacant = ['vacant', 'renovation', 'listed'].includes(p.propertyStatus) || (!p.propertyStatus && !p.tenants.length);
       const status = vacant ? 'vacant' : !row ? null : row.status === 'paid' ? 'paid'
-        : row.phase === 'late' ? 'late' : 'partial';
+        : row.phase === 'late' ? 'late' : row.status === 'partial' ? 'partial' : 'unpaid';
       return {
         name: propertyName(p), tenant: vacant ? null : firstName(p.tenants[0]),
         rentDue: vacant ? 0 : row ? money(row.due) : null,
